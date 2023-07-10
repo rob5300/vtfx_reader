@@ -6,12 +6,13 @@ use std::io::BufReader;
 use std::io::Read;
 use std::mem;
 use std::path::Path;
-use std::slice;
 use std::str;
-
-use simple_endian::*;
-
 use vtfx::VTFXHEADER;
+use std::convert::TryInto;
+use num_enum::TryFromPrimitive;
+
+use crate::vtfx::ImageFormat;
+use crate::vtfx::Vector;
 
 mod vtfx;
 
@@ -73,9 +74,68 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
         println!("File is VTFX file!");
     }
 
-    let mut vtfx: VTFXHEADER = unsafe { mem::zeroed() };
+    let mut vtfx: VTFXHEADER = { Default::default() };
 
-    println!("{:?}", vtfx);
+    let mut i = 0;
+    vtfx.file_type_string = String::from(type_str);
+    i += 4;
+    println!("Type: {}", vtfx.file_type_string);
+    
+    let mut version: [i32; 2] = [0; 2];
+    for j in 0..2 {
+        let start = i + (j * 4);
+        let end = start + 4;
+        let slice: &[u8] = &buffer[start..end];
+        let value: i32 = i32::from_be_bytes(slice.try_into().unwrap());
+        version[j] = value;
+    }
+    i += 4 * 2;
+    vtfx.version = version;
+    println!("Version {}.{}", vtfx.version[0], vtfx.version[1]);
+
+    vtfx.header_size = i32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
+    i += 4;
+
+    vtfx.flags = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
+    i += 4;
+
+    println!("Flags: {}", vtfx.flags);
+
+    vtfx.width = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
+    i += 2;
+
+    vtfx.height = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
+    i += 2;
+
+    vtfx.depth = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
+    i += 2;
+
+    vtfx.num_frames = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
+    i += 2;
+
+    vtfx.preload_data_size = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
+    i += 2;
+
+    vtfx.mip_skip_count = u8::from_be_bytes(buffer[i..i+1].try_into().unwrap());
+    i += 1;
+
+    vtfx.num_resources = u8::from_be_bytes(buffer[i..i+1].try_into().unwrap());
+    i += 1;
+
+    //vtfx.reflectivity
+    i += mem::size_of::<Vector>();
+
+    vtfx.bump_scale = f32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
+    i += 4;
+
+    let image_format_i32 = i32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
+    println!("Raw image format: {}", image_format_i32);
+    vtfx.image_format = ImageFormat::try_from_primitive(image_format_i32).unwrap();
+    i += 4;
+
+    println!("Width: {}, Height: {}, Depth: {}, Image Format: {:?}", vtfx.width, vtfx.height, vtfx.depth, vtfx.image_format);
+
+    //println!("{:?}", vtfx);
 
     Ok(vtfx)
 }
