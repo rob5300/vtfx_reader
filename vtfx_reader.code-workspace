@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+    ],
+    "settings": {
+        "files.autoSave": "afterDelay",
+        "rust-analyzer.linkedProjects": [
+            ".\\Cargo.toml"
+        ]
+    },
+    "launch": {
+        "version": "0.2.0",
+        "configurations": [
+        ]
+    }
+}
