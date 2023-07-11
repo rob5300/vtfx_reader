@@ -7,6 +7,7 @@ use std::io::Read;
 use std::mem;
 use std::path::Path;
 use std::str;
+use image::DynamicImage;
 use vtfx::VTFXHEADER;
 use std::convert::TryInto;
 use num_enum::TryFromPrimitive;
@@ -54,6 +55,7 @@ fn main() {
         Ok(_) => {println!("Success")},
         Err(e) => {println!("Failed to open file: {e}")},
     };
+
 }
 
 fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
@@ -157,5 +159,31 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
 
     println!("Current indent: {}, Data left: {} bytes", i, buffer.len() - i);
 
+    let image = resource_to_image(&buffer, &resource_entry_info, &vtfx)?;
+
+    image.save_with_format("output.png", image::ImageFormat::Png)?;
+
     Ok(vtfx)
+}
+
+fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtfx: &VTFXHEADER) -> Result<DynamicImage, Box<dyn Error>>
+{
+    let res_start: usize = resource_entry_info.resData.try_into()?;
+    let image_slice = &buffer[res_start..buffer.len()];
+    
+    let output_image = DynamicImage::new_rgba8(vtfx.width.into(), vtfx.height.into());
+    let image_format = &vtfx.image_format;
+    if image_format == &ImageFormat::IMAGE_FORMAT_DXT5 || image_format == &ImageFormat::IMAGE_FORMAT_DXT3
+    {
+        let output_size = 4 * vtfx.width * vtfx.height;
+        let output = vec![output_size];
+        //todo: make vec/array with non const size and use below.
+        texpresso::Format::decompress(texpresso::Format::Bc5, image_slice, vtfx.width, vtfx.height, )
+    }
+    else
+    {
+
+    }
+
+    Ok(output_image)
 }

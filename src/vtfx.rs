@@ -6,7 +6,7 @@ const VTF_X360_MINOR_VERSION: i32 = 8;
 #[repr(C)]
 #[derive(Debug, Default)]
 //https://developer.valvesoftware.com/wiki/VTFX_file_format
-//https://github.com/ValveSoftware/source-sdk-2013/blob/0d8dceea4310fde5706b3ce1c70609d72a38efdf/sp/src/public/vtf/vtf.h
+//https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/vtf/vtf.h#L551
 pub struct VTFXHEADER {
     pub file_type_string: String,               // VTFX.
     pub version: [i32; 2],                     // version[0].version[1].
@@ -37,7 +37,7 @@ pub struct Vector {
 #[derive(Debug, Default, PartialEq, TryFromPrimitive)]
 #[repr(i32)]
 #[allow(non_camel_case_types)] //Keep enums same as source
-//https://github.com/ValveSoftware/source-sdk-2013/blob/0d8dceea4310fde5706b3ce1c70609d72a38efdf/sp/src/public/bitmap/imageformat.h#L35
+//https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/bitmap/imageformat.h#L35
 pub enum ImageFormat 
 {
     #[default]
