@@ -5,6 +5,8 @@ const VTF_X360_MINOR_VERSION: i32 = 8;
 
 #[repr(C)]
 #[derive(Debug, Default)]
+//https://developer.valvesoftware.com/wiki/VTFX_file_format
+//https://github.com/ValveSoftware/source-sdk-2013/blob/0d8dceea4310fde5706b3ce1c70609d72a38efdf/sp/src/public/vtf/vtf.h
 pub struct VTFXHEADER {
     pub file_type_string: String,               // VTFX.
     pub version: [i32; 2],                     // version[0].version[1].
@@ -34,6 +36,8 @@ pub struct Vector {
 
 #[derive(Debug, Default, PartialEq, TryFromPrimitive)]
 #[repr(i32)]
+#[allow(non_camel_case_types)] //Keep enums same as source
+//https://github.com/ValveSoftware/source-sdk-2013/blob/0d8dceea4310fde5706b3ce1c70609d72a38efdf/sp/src/public/bitmap/imageformat.h#L35
 pub enum ImageFormat 
 {
     #[default]
@@ -102,4 +106,13 @@ pub enum ImageFormat
 	IMAGE_FORMAT_LE_BGRA8888,
 
 	NUM_IMAGE_FORMATS
+}
+
+#[repr(C)]
+#[derive(Debug, Default)]
+#[allow(non_snake_case)] 
+pub struct ResourceEntryInfo
+{
+	pub chTypeBytes: [u8; 4],
+	pub resData: u32	// Resource data or offset from the beginning of the file
 }

@@ -12,6 +12,7 @@ use std::convert::TryInto;
 use num_enum::TryFromPrimitive;
 
 use crate::vtfx::ImageFormat;
+use crate::vtfx::ResourceEntryInfo;
 use crate::vtfx::Vector;
 
 mod vtfx;
@@ -91,7 +92,6 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     }
     i += 4 * 2;
     vtfx.version = version;
-    println!("Version {}.{}", vtfx.version[0], vtfx.version[1]);
 
     vtfx.header_size = i32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
     i += 4;
@@ -99,7 +99,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     vtfx.flags = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
     i += 4;
 
-    println!("Flags: {}", vtfx.flags);
+    println!("Version: {}.{}, Header Size: {}, Flags: {}", vtfx.version[0], vtfx.version[1], vtfx.header_size, vtfx.flags);
 
     vtfx.width = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
     i += 2;
@@ -112,15 +112,19 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
 
     vtfx.num_frames = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
     i += 2;
+    println!("Num Frames: {}", vtfx.num_frames);
 
     vtfx.preload_data_size = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
     i += 2;
+    println!("Preload Data Size: {}", vtfx.preload_data_size);
 
     vtfx.mip_skip_count = u8::from_be_bytes(buffer[i..i+1].try_into().unwrap());
     i += 1;
+    println!("Mip Skip Count: {}", vtfx.mip_skip_count);
 
     vtfx.num_resources = u8::from_be_bytes(buffer[i..i+1].try_into().unwrap());
     i += 1;
+    println!("Num Resources: {}", vtfx.num_resources);
 
     //vtfx.reflectivity
     i += mem::size_of::<Vector>();
@@ -133,9 +137,25 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     vtfx.image_format = ImageFormat::try_from_primitive(image_format_i32).unwrap();
     i += 4;
 
-    println!("Width: {}, Height: {}, Depth: {}, Image Format: {:?}", vtfx.width, vtfx.height, vtfx.depth, vtfx.image_format);
+    //vtfx.low_res_image_sample
+    i += 4;
 
-    //println!("{:?}", vtfx);
+    vtfx.compressed_size = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
+    i += 4;
+
+    println!("Width: {}, Height: {}, Depth: {}, Image Format: {:?}, Compressed Size: {}", vtfx.width, vtfx.height, vtfx.depth, vtfx.image_format, vtfx.compressed_size);
+
+    let mut resource_entry_info: ResourceEntryInfo = { Default::default() };
+    println!("Resource Type Bytes: {:?}", &buffer[i..i+4]);
+    //resource_entry_info.chTypeBytes
+    i += 4;
+
+    resource_entry_info.resData = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
+    i += 4;
+
+    println!("Res Data:\n{:?}", resource_entry_info);
+
+    println!("Current indent: {}, Data left: {} bytes", i, buffer.len() - i);
 
     Ok(vtfx)
 }
