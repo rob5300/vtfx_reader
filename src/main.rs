@@ -175,10 +175,12 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
     let image_format = &vtfx.image_format;
     if image_format == &ImageFormat::IMAGE_FORMAT_DXT5 || image_format == &ImageFormat::IMAGE_FORMAT_DXT3
     {
-        let output_size = 4 * vtfx.width * vtfx.height;
-        let output = vec![output_size];
+        let size: u32 = 4u32 * vtfx.width.into() * vtfx.height.into();
+        let mut output_buffer: Vec<u8> = vec![0; size.try_into().unwrap()];
+        let output_slice: &mut [u8] = output_buffer.as_mut_slice();
         //todo: make vec/array with non const size and use below.
-        texpresso::Format::decompress(texpresso::Format::Bc5, image_slice, vtfx.width, vtfx.height, )
+        texpresso::Format::decompress(texpresso::Format::Bc5, image_slice, vtfx.width.into(), vtfx.height.into(), output_slice);
+
     }
     else
     {
