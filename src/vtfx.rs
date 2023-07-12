@@ -3,6 +3,8 @@ use num_enum::TryFromPrimitive;
 const VTF_X360_MAJOR_VERSION: i32 = 0x0360;
 const VTF_X360_MINOR_VERSION: i32 = 8;
 
+pub const VTF_LEGACY_RSRC_IMAGE: [u8;4] = [0x30, 0, 0, 0];
+
 #[repr(C)]
 #[derive(Debug, Default)]
 //https://developer.valvesoftware.com/wiki/VTFX_file_format

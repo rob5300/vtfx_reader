@@ -8,12 +8,15 @@ use std::mem;
 use std::path::Path;
 use std::str;
 use image::DynamicImage;
+use image::GenericImage;
+use image::GenericImageView;
 use vtfx::VTFXHEADER;
 use std::convert::TryInto;
 use num_enum::TryFromPrimitive;
 
 use crate::vtfx::ImageFormat;
 use crate::vtfx::ResourceEntryInfo;
+use crate::vtfx::VTF_LEGACY_RSRC_IMAGE;
 use crate::vtfx::Vector;
 
 mod vtfx;
@@ -74,7 +77,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     }
     else
     {
-        println!("File is VTFX file!");
+        println!("File is VTFX file! --START");
     }
 
     let mut vtfx: VTFXHEADER = { Default::default() };
@@ -101,7 +104,10 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     vtfx.flags = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
     i += 4;
 
-    println!("Version: {}.{}, Header Size: {}, Flags: {}", vtfx.version[0], vtfx.version[1], vtfx.header_size, vtfx.flags);
+    let has_alpha = (vtfx.flags & 0x00002000) != 0;
+    let has_alpha_onebit = (vtfx.flags & 0x00001000) != 0;
+
+    println!("Version: {}.{}, Header Size: {}, Flags: {}. Has Alpha: {}, One Bit Alpha: {}", vtfx.version[0], vtfx.version[1], vtfx.header_size, vtfx.flags, has_alpha, has_alpha_onebit);
 
     vtfx.width = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
     i += 2;
@@ -147,21 +153,39 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
 
     println!("Width: {}, Height: {}, Depth: {}, Image Format: {:?}, Compressed Size: {}", vtfx.width, vtfx.height, vtfx.depth, vtfx.image_format, vtfx.compressed_size);
 
-    let mut resource_entry_info: ResourceEntryInfo = { Default::default() };
-    println!("Resource Type Bytes: {:?}", &buffer[i..i+4]);
-    //resource_entry_info.chTypeBytes
-    i += 4;
+    let mut resource_entry_infos: Vec<ResourceEntryInfo> = Vec::new();
+    for res_num in 0..vtfx.num_resources
+    {
+        let mut resource_entry_info: ResourceEntryInfo = { Default::default() };
+        for x in 0..3
+        {
+            resource_entry_info.chTypeBytes[x] = buffer[i+x];
+        }
+        i += 4;
+        resource_entry_info.resData = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
+        i += 4;
+        println!("Res Data #{}: {:?}", res_num, resource_entry_info);
+        resource_entry_infos.push(resource_entry_info);
+    }
 
-    resource_entry_info.resData = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
-    i += 4;
+    println!("--END: Current indent: {}, Data left: {} bytes", i, buffer.len() - i);
 
-    println!("Res Data:\n{:?}", resource_entry_info);
-
-    println!("Current indent: {}, Data left: {} bytes", i, buffer.len() - i);
-
-    let image = resource_to_image(&buffer, &resource_entry_info, &vtfx)?;
-
-    image.save_with_format("output.png", image::ImageFormat::Png)?;
+    let mut res_num = 0;
+    for resource in resource_entry_infos
+    {
+        //Is this resource a high res image?
+        if resource.chTypeBytes == VTF_LEGACY_RSRC_IMAGE
+        {
+            println!("Resource {} is VTF_LEGACY_RSRC_IMAGE", res_num);
+            let image = resource_to_image(&buffer, &resource, &vtfx)?;
+            image.save_with_format(format!("output_{res_num}.png"), image::ImageFormat::Png)?;
+            res_num += 1;
+        }
+        else
+        {
+            println!("Resource {} is unknown type, skipping...", res_num);
+        }
+    }
 
     Ok(vtfx)
 }
@@ -171,20 +195,29 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
     let res_start: usize = resource_entry_info.resData.try_into()?;
     let image_slice = &buffer[res_start..buffer.len()];
     
-    let output_image = DynamicImage::new_rgba8(vtfx.width.into(), vtfx.height.into());
+    let mut output_image = DynamicImage::new_rgba8(vtfx.width.into(), vtfx.height.into());
     let image_format = &vtfx.image_format;
     if image_format == &ImageFormat::IMAGE_FORMAT_DXT5 || image_format == &ImageFormat::IMAGE_FORMAT_DXT3
     {
-        let size: u32 = 4u32 * vtfx.width.into() * vtfx.height.into();
+        let size: u32 = 4u32 * vtfx.width as u32 * vtfx.height as u32;
         let mut output_buffer: Vec<u8> = vec![0; size.try_into().unwrap()];
         let output_slice: &mut [u8] = output_buffer.as_mut_slice();
-        //todo: make vec/array with non const size and use below.
         texpresso::Format::decompress(texpresso::Format::Bc5, image_slice, vtfx.width.into(), vtfx.height.into(), output_slice);
 
-    }
-    else
-    {
-
+        //Take decompressed data and put into image
+        for x in 0..vtfx.width
+        {
+            for y in 0..vtfx.height
+            {
+                let mut pixel = output_image.get_pixel(x.into(), y.into()).clone();
+                let output_index: usize = (x + (y * vtfx.width)).try_into().unwrap();
+                for i in 0..4
+                {
+                    pixel[i] = output_buffer[output_index + i];
+                }
+                output_image.put_pixel(x.into(), y.into(), pixel);
+            }
+        }
     }
 
     Ok(output_image)
