@@ -91,6 +91,15 @@
             ],
             "group": "build",
             "label": "rust: run vtfx_reader"
+        },
+        {
+            "type": "cargo",
+            "command": "build",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build",
+            "label": "rust: cargo build"
         }
     ]
 }

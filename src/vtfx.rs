@@ -33,7 +33,17 @@ impl VTFXHEADER
 {
     pub fn has_alpha(&self) -> bool
     {
-        (self.flags & 0x00002000) != 0
+        (self.flags & 0x2000) != 0
+    }
+
+    pub fn has_onebit_alpha(&self) -> bool
+    {
+        (self.flags & 0x1000) != 0
+    }
+
+    pub fn hint_dx5(&self) -> bool
+    {
+        (self.flags & 0x0020) != 0
     }
 }
 

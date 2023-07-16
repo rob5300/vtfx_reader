@@ -101,7 +101,12 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     i += 4;
 
     let has_alpha = vtfx.has_alpha();
-    let has_alpha_onebit = (vtfx.flags & 0x00001000) != 0;
+    let has_alpha_onebit = vtfx.has_onebit_alpha();
+    let dxt_hint = vtfx.hint_dx5();
+    if cfg!(debug_assertions) && dxt_hint
+    {
+        println!("[Debug] Has dxt5 hint flag");
+    }  
 
     println!("Version: {}.{}, Header Size: {}, Flags: {}. Has Alpha: {}, One Bit Alpha: {}", vtfx.version[0], vtfx.version[1], vtfx.header_size, vtfx.flags, has_alpha, has_alpha_onebit);
 
@@ -165,16 +170,18 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
 
     if cfg!(debug_assertions)
     {
-        println!("[Debug] READ END: Current read position: {}, Data left: {} bytes.\n\n", i, buffer.len() - i);
+        println!("[Debug] READ END: Current read position: {}, Data left: {} bytes.\n", i, buffer.len() - i);
     }
 
     let mut res_num = 0;
     for resource in resource_entry_infos
     {
+        println!("Reading resource #{}. Type: {:?}, Start: {}", res_num, resource.chTypeBytes, resource.resData);
+
         //Is this resource a high res image?
         if resource.chTypeBytes == VTF_LEGACY_RSRC_IMAGE
         {
-            println!("Resource #{} is VTF_LEGACY_RSRC_IMAGE", res_num);
+            println!("    Type is VTF_LEGACY_RSRC_IMAGE");
 
             match resource_to_image(&buffer, &resource, &vtfx) {
                 Ok(image) => {
@@ -189,7 +196,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
         }
         else
         {
-            println!("Resource {} is unknown type (type bytes: {:?}), skipping...", res_num, resource.chTypeBytes);
+            println!("Error: Unknown type, skipping...");
         }
     }
 
@@ -205,6 +212,7 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
     let image_format = &vtfx.image_format;
     if image_format == &ImageFormat::IMAGE_FORMAT_DXT5 || image_format == &ImageFormat::IMAGE_FORMAT_DXT3
     {
+        let bc_format = texpresso::Format::Bc3;
         let channels = match vtfx.has_alpha() {
             true => 4,
             false => 3
@@ -212,8 +220,20 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
         let size: u32 = channels * vtfx.width as u32 * vtfx.height as u32;
         let mut output_buffer: Vec<u8> = vec![0; size.try_into().unwrap()];
         let output_slice: &mut [u8] = output_buffer.as_mut_slice();
+
+        if cfg!(debug_assertions)
+        {
+            println!("[Debug] In slice size: {}. Allocated {} bytes for decompression. Channels: {}", image_slice.len(), size, channels);
+        }
+
+        let expected_compressed_size = bc_format.compressed_size(vtfx.width.into(), vtfx.height.into());
+        if expected_compressed_size != image_slice.len()
+        {
+            println!("WARN: Resource size is {} but expected length is {}", image_slice.len(), expected_compressed_size);
+        }
+
         //Decompress. More research needed to see if a custom version to handle big endian data is needed instead.
-        texpresso::Format::decompress(texpresso::Format::Bc5, image_slice, vtfx.width.into(), vtfx.height.into(), output_slice);
+        bc_format.decompress( image_slice, vtfx.width.into(), vtfx.height.into(), output_slice);
 
         //Take decompressed data and put into image
         for x in 0..vtfx.width
