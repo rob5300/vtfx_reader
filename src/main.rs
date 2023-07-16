@@ -14,18 +14,18 @@ use vtfx::VTFXHEADER;
 use std::convert::TryInto;
 use num_enum::TryFromPrimitive;
 
-use crate::vtfx::ImageFormat;
-use crate::vtfx::ResourceEntryInfo;
+use crate::image_format::ImageFormat;
+use crate::resource_entry_info::ResourceEntryInfo;
 use crate::vtfx::VTF_LEGACY_RSRC_IMAGE;
 use crate::vtfx::Vector;
 
 mod vtfx;
+mod image_format;
+mod resource_entry_info;
 
 fn main() {
     let mut args: Vec<String> = env::args().collect();
 
-    args.push(String::from("E:\\Rust Projects\\vtfx_reader\\00000290.vtf"));
-    
     if args.len() == 1 {
         println!("VTFX Reader");
         println!("Enter path of file:");
@@ -75,10 +75,6 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
         let err = io::Error::new(io::ErrorKind::Other, "File is not VTFX file!");
         return Err(Box::new(err));
     }
-    else
-    {
-        println!("File is VTFX file! --START");
-    }
 
     let mut vtfx: VTFXHEADER = { Default::default() };
 
@@ -104,7 +100,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     vtfx.flags = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
     i += 4;
 
-    let has_alpha = (vtfx.flags & 0x00002000) != 0;
+    let has_alpha = vtfx.has_alpha();
     let has_alpha_onebit = (vtfx.flags & 0x00001000) != 0;
 
     println!("Version: {}.{}, Header Size: {}, Flags: {}. Has Alpha: {}, One Bit Alpha: {}", vtfx.version[0], vtfx.version[1], vtfx.header_size, vtfx.flags, has_alpha, has_alpha_onebit);
@@ -154,7 +150,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     println!("Width: {}, Height: {}, Depth: {}, Image Format: {:?}, Compressed Size: {}", vtfx.width, vtfx.height, vtfx.depth, vtfx.image_format, vtfx.compressed_size);
 
     let mut resource_entry_infos: Vec<ResourceEntryInfo> = Vec::new();
-    for res_num in 0..vtfx.num_resources
+    for _res_num in 0..vtfx.num_resources
     {
         let mut resource_entry_info: ResourceEntryInfo = { Default::default() };
         for x in 0..3
@@ -164,11 +160,13 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
         i += 4;
         resource_entry_info.resData = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
         i += 4;
-        println!("Res Data #{}: {:?}", res_num, resource_entry_info);
         resource_entry_infos.push(resource_entry_info);
     }
 
-    println!("--END: Current indent: {}, Data left: {} bytes", i, buffer.len() - i);
+    if cfg!(debug_assertions)
+    {
+        println!("[Debug] READ END: Current read position: {}, Data left: {} bytes.\n\n", i, buffer.len() - i);
+    }
 
     let mut res_num = 0;
     for resource in resource_entry_infos
@@ -176,14 +174,22 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
         //Is this resource a high res image?
         if resource.chTypeBytes == VTF_LEGACY_RSRC_IMAGE
         {
-            println!("Resource {} is VTF_LEGACY_RSRC_IMAGE", res_num);
-            let image = resource_to_image(&buffer, &resource, &vtfx)?;
-            image.save_with_format(format!("output_{res_num}.png"), image::ImageFormat::Png)?;
+            println!("Resource #{} is VTF_LEGACY_RSRC_IMAGE", res_num);
+
+            match resource_to_image(&buffer, &resource, &vtfx) {
+                Ok(image) => {
+                    let new_image_name = format!("output_{res_num}.png");
+                    println!("    Saved resource image data to '{}'", new_image_name);
+                    image.save_with_format(new_image_name, image::ImageFormat::Png)?;
+                },
+                Err(error) => {println!("    {}", error)},
+            }
+            
             res_num += 1;
         }
         else
         {
-            println!("Resource {} is unknown type, skipping...", res_num);
+            println!("Resource {} is unknown type (type bytes: {:?}), skipping...", res_num, resource.chTypeBytes);
         }
     }
 
@@ -199,9 +205,14 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
     let image_format = &vtfx.image_format;
     if image_format == &ImageFormat::IMAGE_FORMAT_DXT5 || image_format == &ImageFormat::IMAGE_FORMAT_DXT3
     {
-        let size: u32 = 4u32 * vtfx.width as u32 * vtfx.height as u32;
+        let channels = match vtfx.has_alpha() {
+            true => 4,
+            false => 3
+        };
+        let size: u32 = channels * vtfx.width as u32 * vtfx.height as u32;
         let mut output_buffer: Vec<u8> = vec![0; size.try_into().unwrap()];
         let output_slice: &mut [u8] = output_buffer.as_mut_slice();
+        //Decompress. More research needed to see if a custom version to handle big endian data is needed instead.
         texpresso::Format::decompress(texpresso::Format::Bc5, image_slice, vtfx.width.into(), vtfx.height.into(), output_slice);
 
         //Take decompressed data and put into image
@@ -211,13 +222,18 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
             {
                 let mut pixel = output_image.get_pixel(x.into(), y.into()).clone();
                 let output_index: usize = (x + (y * vtfx.width)).try_into().unwrap();
-                for i in 0..4
+                for i in 0..channels.try_into().unwrap()
                 {
                     pixel[i] = output_buffer[output_index + i];
                 }
                 output_image.put_pixel(x.into(), y.into(), pixel);
             }
         }
+    }
+    else
+    {
+        let err = io::Error::new(io::ErrorKind::Other, format!("Unsupported image format: {:?}", image_format));
+        return Err(Box::new(err));
     }
 
     Ok(output_image)
