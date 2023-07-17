@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use once_cell::sync::Lazy;
 
 use num_enum::TryFromPrimitive;
 
@@ -79,16 +80,15 @@ pub enum ImageFormat
 #[derive(Clone)]
 pub struct image_format_info
 {
-    pub channels: u8,
-    pub depth: u8,
-    pub channel_order: Vec<u8>,
+    pub channels: u16,
+    pub depth: u16,
+    pub channel_order: Vec<u16>,
     pub bc_format: Option<texpresso::Format>
 }
 
-/* 
 impl image_format_info
 {
-    fn new(channels: u8, depth: u8, channel_order: Vec<u8>) -> image_format_info
+    fn new(channels: u16, depth: u16, channel_order: Vec<u16>) -> image_format_info
     {
         image_format_info {
             channels: channels,
@@ -98,7 +98,7 @@ impl image_format_info
         }
     }
 
-    fn new_with_bc(channels: u8, depth: u8, channel_order: Vec<u8>, bc_format: Option<texpresso::Format>) -> image_format_info
+    fn new_with_bc(channels: u16, depth: u16, channel_order: Vec<u16>, bc_format: Option<texpresso::Format>) -> image_format_info
     {
         image_format_info {
             channels: channels,
@@ -109,19 +109,18 @@ impl image_format_info
     }
 }
 
-
-static image_format_info_pairs: Box<[(ImageFormat, image_format_info)]> = Box::new([
-    (ImageFormat::IMAGE_FORMAT_DXT5, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc5)))
-]);
-
-static image_format_info_map: HashMap<ImageFormat, image_format_info> = HashMap::from(image_format_info_pairs);
-
+static IMAGE_FORMAT_INFO_MAP: Lazy<HashMap<ImageFormat, image_format_info>> = Lazy::new(|| {
+    let mut map = HashMap::new();
+    map.insert(ImageFormat::IMAGE_FORMAT_DXT1, image_format_info::new_with_bc(3, 1, vec![0,1,2], Option::from(texpresso::Format::Bc1)));
+    map.insert(ImageFormat::IMAGE_FORMAT_DXT5, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc3)));
+    map.insert(ImageFormat::IMAGE_FORMAT_RGBA16161616, image_format_info::new_with_bc(4, 2, vec![0,1,2,3], Option::None));
+    return map;
+});
 
 impl ImageFormat
 {
-    pub fn get_format_info(&self) -> image_format_info
+    pub fn get_format_info(&self) -> Option<&image_format_info>
     {
-        image_format_info_map[&self]
+        return IMAGE_FORMAT_INFO_MAP.get(&self);
     }
 }
-*/

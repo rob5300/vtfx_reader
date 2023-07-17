@@ -1,3 +1,4 @@
+use std::cell::RefMut;
 use std::env;
 use std::error::Error;
 use std::fs::File;
@@ -6,6 +7,7 @@ use std::io::BufReader;
 use std::io::Read;
 use std::mem;
 use std::path::Path;
+use std::rc::Rc;
 use std::str;
 use image::DynamicImage;
 use image::GenericImage;
@@ -168,10 +170,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
         resource_entry_infos.push(resource_entry_info);
     }
 
-    if cfg!(debug_assertions)
-    {
-        println!("[Debug] READ END: Current read position: {}, Data left: {} bytes.\n", i, buffer.len() - i);
-    }
+    if cfg!(debug_assertions){ println!("[Debug] READ END: Current read position: {}, Data left: {} bytes.\n", i, buffer.len() - i); }
 
     let mut res_num = 0;
     for resource in resource_entry_infos
@@ -210,30 +209,39 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
     
     let mut output_image = DynamicImage::new_rgba8(vtfx.width.into(), vtfx.height.into());
     let image_format = &vtfx.image_format;
-    if image_format == &ImageFormat::IMAGE_FORMAT_DXT5 || image_format == &ImageFormat::IMAGE_FORMAT_DXT3
+    let format_info = image_format.get_format_info();
+    if format_info.is_some()
     {
-        let bc_format = texpresso::Format::Bc3;
+        let format_info_u = format_info.unwrap();
         let channels = match vtfx.has_alpha() {
             true => 4,
             false => 3
         };
         let size: u32 = channels * vtfx.width as u32 * vtfx.height as u32;
-        let mut output_buffer: Vec<u8> = vec![0; size.try_into().unwrap()];
-        let output_slice: &mut [u8] = output_buffer.as_mut_slice();
+        let mut image_vec: Vec<u8>;
 
-        if cfg!(debug_assertions)
+        //If this format is BC encoded
+        if format_info_u.bc_format.is_some()
         {
-            println!("[Debug] In slice size: {}. Allocated {} bytes for decompression. Channels: {}", image_slice.len(), size, channels);
-        }
+            let bc_format = format_info_u.bc_format.unwrap();
+            image_vec = vec![0; size.try_into().unwrap()];
+            let image_vec_slice = image_vec.as_mut_slice();
 
-        let expected_compressed_size = bc_format.compressed_size(vtfx.width.into(), vtfx.height.into());
-        if expected_compressed_size != image_slice.len()
+            if cfg!(debug_assertions){ println!("[Debug] In slice size: {}. Allocated {} bytes for decompression. Channels: {}", image_slice.len(), size, channels); }
+
+            let expected_compressed_size = bc_format.compressed_size(vtfx.width.into(), vtfx.height.into());
+            if expected_compressed_size != image_slice.len()
+            {
+                println!("WARN: Resource size is {} but expected length is {}. ({} % diff) Program may crash.", image_slice.len(), expected_compressed_size, (image_slice.len() as f32 / expected_compressed_size as f32) * 100f32);
+            }
+
+            //Decompress. More research needed to see if a custom version to handle big endian data is needed instead.
+            bc_format.decompress( image_slice, vtfx.width.into(), vtfx.height.into(), image_vec_slice);
+        }
+        else
         {
-            println!("WARN: Resource size is {} but expected length is {}", image_slice.len(), expected_compressed_size);
+            image_vec = Vec::from(image_slice);
         }
-
-        //Decompress. More research needed to see if a custom version to handle big endian data is needed instead.
-        bc_format.decompress( image_slice, vtfx.width.into(), vtfx.height.into(), output_slice);
 
         //Take decompressed data and put into image
         for x in 0..vtfx.width
@@ -241,10 +249,13 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
             for y in 0..vtfx.height
             {
                 let mut pixel = output_image.get_pixel(x.into(), y.into()).clone();
-                let output_index: usize = (x + (y * vtfx.width)).try_into().unwrap();
+                let pixel_index: u16 = x + (y * vtfx.width);
                 for i in 0..channels.try_into().unwrap()
                 {
-                    pixel[i] = output_buffer[output_index + i];
+                    //Using format data, construct index and copy source image pixel colour data
+                    let channel_offset = format_info_u.channel_order[i];
+                    let from_index: usize = ((format_info_u.depth * pixel_index) + (channel_offset * format_info_u.depth)).try_into().unwrap();
+                    pixel[i] = get_pixel_as_u8(&image_vec, from_index, &format_info_u.depth);
                 }
                 output_image.put_pixel(x.into(), y.into(), pixel);
             }
@@ -257,4 +268,22 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
     }
 
     Ok(output_image)
+}
+
+///Get pixel as u8. Convert larger sized pixels down
+fn get_pixel_as_u8(in_buffer: &Vec<u8>, index: usize, depth: &u16) -> u8
+{
+    match depth
+    {
+        1 => in_buffer[index],
+        2 => {
+            let colour = u16::from_be_bytes(in_buffer[index..index+2].try_into().unwrap());
+            return (colour / 2).try_into().unwrap();
+        },
+        4 => {
+            let colour = u32::from_be_bytes(in_buffer[index..index+4].try_into().unwrap());
+            return (colour / 4).try_into().unwrap();
+        },
+        _ => { 0 }
+    }
 }
