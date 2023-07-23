@@ -1,4 +1,3 @@
-use std::cell::RefMut;
 use std::env;
 use std::error::Error;
 use std::fs::File;
@@ -7,11 +6,12 @@ use std::io::BufReader;
 use std::io::Read;
 use std::mem;
 use std::path::Path;
-use std::rc::Rc;
+use std::process::exit;
 use std::str;
 use image::DynamicImage;
 use image::GenericImage;
 use image::GenericImageView;
+use lzma_rs::decompress::Options;
 use vtfx::VTFXHEADER;
 use std::convert::TryInto;
 use num_enum::TryFromPrimitive;
@@ -24,6 +24,18 @@ use crate::vtfx::Vector;
 mod vtfx;
 mod image_format;
 mod resource_entry_info;
+
+const LZMA_MAGIC: &[u8;4] = b"LZMA"; //LZMA
+
+//https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/tier1/lzmaDecoder.h#L21
+#[allow(non_camel_case_types, non_snake_case)]
+struct lzma_header_t
+{
+	pub id: i32,
+	pub actualSize: i32,		// always little endian
+	pub lzmaSize: i32,	// always little endian
+	pub properties: [u8; 5]
+}
 
 fn main() {
     let mut args: Vec<String> = env::args().collect();
@@ -205,7 +217,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
 fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtfx: &VTFXHEADER) -> Result<DynamicImage, Box<dyn Error>>
 {
     let res_start: usize = resource_entry_info.resData.try_into()?;
-    let image_slice = &buffer[res_start..buffer.len()];
+    let mut image_slice = &buffer[res_start..buffer.len()];
     
     let mut output_image = DynamicImage::new_rgba8(vtfx.width.into(), vtfx.height.into());
     let image_format = &vtfx.image_format;
@@ -224,18 +236,38 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
         if format_info_u.bc_format.is_some()
         {
             let bc_format = format_info_u.bc_format.unwrap();
-            image_vec = vec![0; size.try_into().unwrap()];
+            image_vec = vec![0; size.try_into()?];
             let image_vec_slice = image_vec.as_mut_slice();
+            //let mut decompress_buffer: Rc<Vec<u8>>;
 
             if cfg!(debug_assertions){ println!("[Debug] In slice size: {}. Allocated {} bytes for decompression. Channels: {}", image_slice.len(), size, channels); }
 
+            //What the dxt data size should be
             let expected_compressed_size = bc_format.compressed_size(vtfx.width.into(), vtfx.height.into());
             if expected_compressed_size != image_slice.len()
             {
-                println!("WARN: Resource size is {} but expected length is {}. ({} % diff) Program may crash.", image_slice.len(), expected_compressed_size, (image_slice.len() as f32 / expected_compressed_size as f32) * 100f32);
+                //is this lzma?
+                if &image_slice[0..4] == LZMA_MAGIC
+                {
+                    //Try to decompress lzma data?
+                    //https://github.com/ValveSoftware/source-sdk-2013/blob/0d8dceea4310fde5706b3ce1c70609d72a38efdf/sp/src/tier1/lzmaDecoder.cpp#L700
+                    let mut decomp: Vec<u8> = Vec::new();
+                    let mut lzma_in_slice = &image_slice[4..image_slice.len()];
+                    let actual_size: i32 = i32::from_le_bytes(image_slice[4..8].try_into().unwrap());
+                    let compressed_size: i32 = i32::from_le_bytes(image_slice[8..12].try_into().unwrap());
+                    println!("    LZMA actual size: {}. Compressed size: {}. Expected dxt length: {}", actual_size, compressed_size, expected_compressed_size);
+                    //TODO: investigate if header is backwards than what lib expects?
+                    lzma_rs::lzma_decompress(&mut lzma_in_slice, &mut decomp)?;
+                    println!("{}", decomp.len());
+                }
+                else
+                {
+                    println!("WARN: Resource size is {} but expected length is {}. ({} % diff) Program would crash.", image_slice.len(), expected_compressed_size, (image_slice.len() as f32 / expected_compressed_size as f32) * 100f32);
+                    exit(1);
+                }
             }
 
-            //Decompress. More research needed to see if a custom version to handle big endian data is needed instead.
+            //Decompress dxt image, if its still compressed this will fail
             bc_format.decompress( image_slice, vtfx.width.into(), vtfx.height.into(), image_vec_slice);
         }
         else
@@ -250,12 +282,12 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
             {
                 let mut pixel = output_image.get_pixel(x.into(), y.into()).clone();
                 let pixel_index: u16 = x + (y * vtfx.width);
-                for i in 0..channels.try_into().unwrap()
+                for i in 0..channels.try_into()?
                 {
                     //Using format data, construct index and copy source image pixel colour data
                     let channel_offset = format_info_u.channel_order[i];
-                    let from_index: usize = ((format_info_u.depth * pixel_index) + (channel_offset * format_info_u.depth)).try_into().unwrap();
-                    pixel[i] = get_pixel_as_u8(&image_vec, from_index, &format_info_u.depth);
+                    let from_index: usize = ((format_info_u.depth * pixel_index) + (channel_offset * format_info_u.depth)).try_into()?;
+                    pixel[i] = get_pixel_as_u8(&image_vec, from_index, &format_info_u.depth)?;
                 }
                 output_image.put_pixel(x.into(), y.into(), pixel);
             }
@@ -271,19 +303,19 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
 }
 
 ///Get pixel as u8. Convert larger sized pixels down
-fn get_pixel_as_u8(in_buffer: &Vec<u8>, index: usize, depth: &u16) -> u8
+fn get_pixel_as_u8(in_buffer: &Vec<u8>, index: usize, depth: &u16) -> Result<u8, Box<dyn Error>>
 {
     match depth
     {
-        1 => in_buffer[index],
+        1 => Ok(in_buffer[index]),
         2 => {
-            let colour = u16::from_be_bytes(in_buffer[index..index+2].try_into().unwrap());
-            return (colour / 2).try_into().unwrap();
+            let colour = u16::from_be_bytes(in_buffer[index..index+2].try_into()?);
+            Ok((colour / 2).try_into()?)
         },
         4 => {
-            let colour = u32::from_be_bytes(in_buffer[index..index+4].try_into().unwrap());
-            return (colour / 4).try_into().unwrap();
+            let colour = u32::from_be_bytes(in_buffer[index..index+4].try_into()?);
+            Ok((colour / 4).try_into()?)
         },
-        _ => { 0 }
+        _ => Err(Box::new(io::Error::new(io::ErrorKind::Other, format!("Unexpected depth size '{}'", depth))))
     }
 }
