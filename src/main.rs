@@ -27,16 +27,6 @@ mod resource_entry_info;
 
 const LZMA_MAGIC: &[u8;4] = b"LZMA"; //LZMA
 
-//https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/tier1/lzmaDecoder.h#L21
-#[allow(non_camel_case_types, non_snake_case)]
-struct lzma_header_t
-{
-	pub id: i32,
-	pub actualSize: i32,		// always little endian
-	pub lzmaSize: i32,	// always little endian
-	pub properties: [u8; 5]
-}
-
 fn main() {
     let mut args: Vec<String> = env::args().collect();
 
@@ -217,7 +207,8 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
 fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtfx: &VTFXHEADER) -> Result<DynamicImage, Box<dyn Error>>
 {
     let res_start: usize = resource_entry_info.resData.try_into()?;
-    let mut image_slice = &buffer[res_start..buffer.len()];
+    //Copy input buffer
+    let mut resource_buffer = Vec::from(&buffer[res_start..buffer.len()]);
     
     let mut output_image = DynamicImage::new_rgba8(vtfx.width.into(), vtfx.height.into());
     let image_format = &vtfx.image_format;
@@ -240,39 +231,52 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
             let image_vec_slice = image_vec.as_mut_slice();
             //let mut decompress_buffer: Rc<Vec<u8>>;
 
-            if cfg!(debug_assertions){ println!("[Debug] In slice size: {}. Allocated {} bytes for decompression. Channels: {}", image_slice.len(), size, channels); }
+            if cfg!(debug_assertions){ println!("[Debug] In slice size: {}. Allocated {} bytes for decompression. Channels: {}", resource_buffer.len(), size, channels); }
 
             //What the dxt data size should be
             let expected_compressed_size = bc_format.compressed_size(vtfx.width.into(), vtfx.height.into());
-            if expected_compressed_size != image_slice.len()
+            if expected_compressed_size != resource_buffer.len()
             {
                 //is this lzma?
-                if &image_slice[0..4] == LZMA_MAGIC
+                if &resource_buffer[0..4] == LZMA_MAGIC
                 {
-                    //Try to decompress lzma data?
-                    //https://github.com/ValveSoftware/source-sdk-2013/blob/0d8dceea4310fde5706b3ce1c70609d72a38efdf/sp/src/tier1/lzmaDecoder.cpp#L700
+                    //Try to decompress lzma data
+                    //https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/tier1/lzmaDecoder.h#L21
                     let mut decomp: Vec<u8> = Vec::new();
-                    let mut lzma_in_slice = &image_slice[4..image_slice.len()];
-                    let actual_size: i32 = i32::from_le_bytes(image_slice[4..8].try_into().unwrap());
-                    let compressed_size: i32 = i32::from_le_bytes(image_slice[8..12].try_into().unwrap());
-                    println!("    LZMA actual size: {}. Compressed size: {}. Expected dxt length: {}", actual_size, compressed_size, expected_compressed_size);
-                    //TODO: investigate if header is backwards than what lib expects?
-                    lzma_rs::lzma_decompress(&mut lzma_in_slice, &mut decomp)?;
+                    
+                    let actual_size: u64 = i32::from_le_bytes(resource_buffer[4..8].try_into()?).try_into()?;
+                    let compressed_size: i32 = i32::from_le_bytes(resource_buffer[8..12].try_into()?);
+                    
+                    //Reconstruct header and payload
+                    let mut new_header_resource_buffer: Vec<u8> = Vec::new();
+                    new_header_resource_buffer.push(resource_buffer[12]);
+                    new_header_resource_buffer.extend_from_slice(&resource_buffer[8..12]);
+                    new_header_resource_buffer.extend_from_slice(&actual_size.to_le_bytes());
+                    new_header_resource_buffer.extend_from_slice(&resource_buffer[13..]);
+                    resource_buffer = new_header_resource_buffer;
+                    
+                    if cfg!(debug_assertions) {
+                        println!("[Debug LZMA] Actual size: {} (Expected {}). Compressed size: {} (header cmpr size {})", actual_size, expected_compressed_size, compressed_size, vtfx.compressed_size);
+                    }
+                    //Header is read as 8 (properties), 32 compressed size, 64 uncompressed size
+                    lzma_rs::lzma_decompress(&mut &resource_buffer[..], &mut decomp)?;
                     println!("{}", decomp.len());
+                    resource_buffer = decomp;
                 }
                 else
                 {
-                    println!("WARN: Resource size is {} but expected length is {}. ({} % diff) Program would crash.", image_slice.len(), expected_compressed_size, (image_slice.len() as f32 / expected_compressed_size as f32) * 100f32);
+                    println!("WARN: Resource size is {} but expected length is {}. ({} % diff) Program would crash.", resource_buffer.len(), expected_compressed_size, (resource_buffer.len() as f32 / expected_compressed_size as f32) * 100f32);
                     exit(1);
                 }
             }
 
             //Decompress dxt image, if its still compressed this will fail
-            bc_format.decompress( image_slice, vtfx.width.into(), vtfx.height.into(), image_vec_slice);
+            bc_format.decompress(resource_buffer.as_mut_slice(), vtfx.width.into(), vtfx.height.into(), image_vec_slice);
         }
         else
         {
-            image_vec = Vec::from(image_slice);
+            //Resource buffer is already usable
+            image_vec = resource_buffer;
         }
 
         //Take decompressed data and put into image

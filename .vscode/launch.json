@@ -13,7 +13,7 @@
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],
-            "console": "externalTerminal",
+            "console": "integratedTerminal",
             "preLaunchTask": "rust: cargo build"
         }
     ]
