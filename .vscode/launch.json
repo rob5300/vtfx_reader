@@ -12,7 +12,7 @@
             "args": ["${workspaceFolder}/test/scout_blue.360.vtf"],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
-            "environment": [],
+            "environment": [{"name": "RUST_BACKTRACE", "value": "1"}],
             "console": "integratedTerminal",
             "preLaunchTask": "rust: cargo build"
         }

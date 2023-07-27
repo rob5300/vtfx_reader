@@ -242,26 +242,56 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                 {
                     //Try to decompress lzma data
                     //https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/tier1/lzmaDecoder.h#L21
-                    let mut decomp: Vec<u8> = Vec::new();
                     
-                    let actual_size: u64 = i32::from_le_bytes(resource_buffer[4..8].try_into()?).try_into()?;
-                    let compressed_size: i32 = i32::from_le_bytes(resource_buffer[8..12].try_into()?);
+                    let actual_size: u64 = u32::from_le_bytes(resource_buffer[4..8].try_into()?).into();
+
+                    let mut decomp: Vec<u8> = Vec::with_capacity(actual_size as usize);
+
+                    let compressed_size: u32 = u32::from_le_bytes(resource_buffer[8..12].try_into()?);
+
+                    let mut dictionary_size: u32 = 0;
+                    let props_data = &resource_buffer[12..16];
+                    for i in 0..3
+                    {
+                        dictionary_size += (props_data[1 + i] as u32) << (i * 8);
+                    }
+                    if dictionary_size == 0
+                    {
+                        dictionary_size = 1;
+                    }
                     
                     //Reconstruct header and payload
-                    let mut new_header_resource_buffer: Vec<u8> = Vec::new();
-                    new_header_resource_buffer.push(resource_buffer[12]);
-                    new_header_resource_buffer.extend_from_slice(&resource_buffer[8..12]);
+                    let mut new_header_resource_buffer: Vec<u8> = Vec::with_capacity(resource_buffer.len());
+                    new_header_resource_buffer.push(resource_buffer[12]); //93
+
+                    if cfg!(debug_assertions) {
+                        println!("[Debug LZMA] Dictionary size: {}", dictionary_size);
+                        let mut prop0: u8 = u8::from(resource_buffer[12]);
+                        let original_prop0 = prop0.clone();
+                        let mut pb: i32 = 0;
+                        let mut lp: i32 = 0;
+                        let mut lc: i32 = 0;
+                        get_valve_lzma_properties(&mut prop0, &mut pb, &mut lp, &mut lc);
+                        println!("[Debug LZMA] Properties Decoded ({}): prop0: {}, pb: {}, lp: {}, lc: {}", original_prop0, prop0, pb, lp, lc);
+                    }
+
+                    //Dictionary size
+                    new_header_resource_buffer.extend_from_slice(&dictionary_size.to_le_bytes());
+
+                    //Actual size
                     new_header_resource_buffer.extend_from_slice(&actual_size.to_le_bytes());
-                    new_header_resource_buffer.extend_from_slice(&resource_buffer[13..]);
+
+                    //Rest of buffer
+                    new_header_resource_buffer.extend_from_slice(&resource_buffer[17..]);
                     resource_buffer = new_header_resource_buffer;
                     
                     if cfg!(debug_assertions) {
                         println!("[Debug LZMA] Actual size: {} (Expected {}). Compressed size: {} (header cmpr size {})", actual_size, expected_compressed_size, compressed_size, vtfx.compressed_size);
                     }
-                    //Header is read as 8 (properties), 32 compressed size, 64 uncompressed size
+                    //Header is read as 8 (properties), 32 dictionary size, u64 real size
                     lzma_rs::lzma_decompress(&mut &resource_buffer[..], &mut decomp)?;
-                    println!("{}", decomp.len());
                     resource_buffer = decomp;
+                    println!("Decompressed to: {}, Expected: {}", resource_buffer.len(), expected_compressed_size);
                 }
                 else
                 {
@@ -280,17 +310,20 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
         }
 
         //Take decompressed data and put into image
-        for x in 0..vtfx.width
+        let width = vtfx.width as u32;
+        let height = vtfx.height as u32;
+        let depth = format_info_u.depth as u32;
+        for x in 0..width
         {
-            for y in 0..vtfx.height
+            for y in 0..height
             {
                 let mut pixel = output_image.get_pixel(x.into(), y.into()).clone();
-                let pixel_index: u16 = x + (y * vtfx.width);
+                let pixel_index: u32 = x + (y * width);
                 for i in 0..channels.try_into()?
                 {
                     //Using format data, construct index and copy source image pixel colour data
-                    let channel_offset = format_info_u.channel_order[i];
-                    let from_index: usize = ((format_info_u.depth * pixel_index) + (channel_offset * format_info_u.depth)).try_into()?;
+                    let channel_offset = format_info_u.channel_order[i] as u32;
+                    let from_index: usize = ((depth * pixel_index) + (channel_offset * depth)).try_into()?;
                     pixel[i] = get_pixel_as_u8(&image_vec, from_index, &format_info_u.depth)?;
                 }
                 output_image.put_pixel(x.into(), y.into(), pixel);
@@ -322,4 +355,20 @@ fn get_pixel_as_u8(in_buffer: &Vec<u8>, index: usize, depth: &u16) -> Result<u8,
         },
         _ => Err(Box::new(io::Error::new(io::ErrorKind::Other, format!("Unexpected depth size '{}'", depth))))
     }
+}
+
+fn get_valve_lzma_properties(prop0: &mut u8, pb: &mut i32, lp: &mut i32, lc: &mut i32) 
+{
+    while pb < &mut 5 && prop0 >= & mut(9 * 5){
+        *pb += 1;
+        *prop0 -= 45;
+    }
+    
+    // Second loop:
+    while lp < &mut 5 && prop0 >= &mut 9 {
+        *lp += 1;
+        *prop0 -= 9;
+    }
+
+    *lc = *prop0 as i32;
 }
