@@ -69,113 +69,22 @@ fn main() {
 fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     let f = File::open(path)?;
     let mut reader = BufReader::new(f);
-    let mut buffer = Vec::new();
+    let mut buffer: Vec<u8> = Vec::new();
 
     reader.read_to_end(&mut buffer)?;
 
-    let type_str_range = &buffer[0..4];
-    let type_str = str::from_utf8(&type_str_range)?;
-    if type_str != "VTFX"
-    {
-        let err = io::Error::new(io::ErrorKind::Other, "File is not VTFX file!");
-        return Err(Box::new(err));
-    }
+    let vtfx = VTFXHEADER::from(&buffer)?;
 
-    let mut vtfx: VTFXHEADER = { Default::default() };
-
-    let mut i = 0;
-    vtfx.file_type_string = String::from(type_str);
-    i += 4;
-    println!("Type: {}", vtfx.file_type_string);
-    
-    let mut version: [i32; 2] = [0; 2];
-    for j in 0..2 {
-        let start = i + (j * 4);
-        let end = start + 4;
-        let slice: &[u8] = &buffer[start..end];
-        let value: i32 = i32::from_be_bytes(slice.try_into().unwrap());
-        version[j] = value;
-    }
-    i += 4 * 2;
-    vtfx.version = version;
-
-    vtfx.header_size = i32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
-    i += 4;
-
-    vtfx.flags = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
-    i += 4;
-
-    let has_alpha = vtfx.has_alpha();
-    let has_alpha_onebit = vtfx.has_onebit_alpha();
     let dxt_hint = vtfx.hint_dx5();
     if cfg!(debug_assertions) && dxt_hint
     {
         println!("[Debug] Has dxt5 hint flag");
     }  
 
-    println!("Version: {}.{}, Header Size: {}, Flags: {}. Has Alpha: {}, One Bit Alpha: {}", vtfx.version[0], vtfx.version[1], vtfx.header_size, vtfx.flags, has_alpha, has_alpha_onebit);
-
-    vtfx.width = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
-    i += 2;
-
-    vtfx.height = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
-    i += 2;
-
-    vtfx.depth = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
-    i += 2;
-
-    vtfx.num_frames = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
-    i += 2;
-    println!("Num Frames: {}", vtfx.num_frames);
-
-    vtfx.preload_data_size = u16::from_be_bytes(buffer[i..i+2].try_into().unwrap());
-    i += 2;
-    println!("Preload Data Size: {}", vtfx.preload_data_size);
-
-    vtfx.mip_skip_count = u8::from_be_bytes(buffer[i..i+1].try_into().unwrap());
-    i += 1;
-    println!("Mip Skip Count: {}", vtfx.mip_skip_count);
-
-    vtfx.num_resources = u8::from_be_bytes(buffer[i..i+1].try_into().unwrap());
-    i += 1;
-    println!("Num Resources: {}", vtfx.num_resources);
-
-    //vtfx.reflectivity
-    i += mem::size_of::<Vector>();
-
-    vtfx.bump_scale = f32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
-    i += 4;
-
-    let image_format_i32 = i32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
-    println!("Raw image format: {}", image_format_i32);
-    vtfx.image_format = ImageFormat::try_from_primitive(image_format_i32).unwrap();
-    i += 4;
-
-    //vtfx.low_res_image_sample
-    i += 4;
-
-    vtfx.compressed_size = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
-    i += 4;
-
-    println!("Width: {}, Height: {}, Depth: {}, Image Format: {:?}, Compressed Size: {}", vtfx.width, vtfx.height, vtfx.depth, vtfx.image_format, vtfx.compressed_size);
-
-    let mut resource_entry_infos: Vec<ResourceEntryInfo> = Vec::new();
-    for _res_num in 0..vtfx.num_resources
-    {
-        let mut resource_entry_info: ResourceEntryInfo = { Default::default() };
-        for x in 0..3
-        {
-            resource_entry_info.chTypeBytes[x] = buffer[i+x];
-        }
-        i += 4;
-        resource_entry_info.resData = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
-        i += 4;
-        resource_entry_infos.push(resource_entry_info);
-    }
-
-    if cfg!(debug_assertions){ println!("[Debug] READ END: Current read position: {}, Data left: {} bytes.\n", i, buffer.len() - i); }
+    println!("{}", vtfx);
 
     let mut res_num = 0;
+    let resource_entry_infos = vtfx.get_resource_entry_infos(&buffer);
     for resource in resource_entry_infos
     {
         println!("Reading resource #{}. Type: {:?}, Start: {}", res_num, resource.chTypeBytes, resource.resData);
