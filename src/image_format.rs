@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::error::Error;
+use std::{collections::HashMap};
+use std::io;
 use once_cell::sync::Lazy;
 
 use num_enum::TryFromPrimitive;
@@ -107,6 +109,75 @@ impl image_format_info
             bc_format: bc_format
         }
     }
+}
+
+//Correct endianness of dxt bc data
+pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Result<(), Box<dyn Error>>
+{
+    //https://stackoverflow.com/questions/67066835/how-to-decompress-a-bc3-unorm-dds-texture-format
+    /*
+    struct BC1
+    {
+        uint16_t    rgb[2]; // 565 colors
+        uint32_t    bitmap; // 2bpp rgb bitmap
+    };
+
+    static_assert(sizeof(BC1) == 8, "Mismatch block size");
+
+    struct BC3
+    {
+        uint8_t     alpha[2];   // alpha values
+        uint8_t     bitmap[6];  // 3bpp alpha bitmap
+        BC1         bc1;        // BC1 rgb data
+    };
+
+    static_assert(sizeof(BC3) == 16, "Mismatch block size");
+    */
+
+    match format {
+        texpresso::Format::Bc3 => 
+        {
+            if data.len() % 16 != 0
+            {
+                let err = io::Error::new(io::ErrorKind::Other, format!("Length of dxt buffer should be multiple of 16. Length: {}", data.len()));
+                return Err(Box::new(err));
+            }
+
+            for block in data.chunks_mut(16)
+            {
+                let rgb_index: usize = 8;
+                let bitmap_index: usize = 12;
+                
+                //rgb data fix (u16[2]])
+                for i in 0..2
+                {
+                    let index = rgb_index + (2 * i);
+                    let u16 = u16::from_be_bytes(block[index..index + 2].try_into()?);
+                    let u16_bytes = u16.to_le_bytes();
+                    
+                    for j in 0..u16_bytes.len()
+                    {
+                        block[index + j] = u16_bytes[j];
+                    }
+                }
+
+                //bitmap u32 fix
+                let bitmap: u32 = u32::from_be_bytes(block[bitmap_index..bitmap_index + 4].try_into()?);
+                let bitmap_bytes = bitmap.to_le_bytes();
+                for i in 0..4
+                {
+                    block[bitmap_index + i] = bitmap_bytes[i];
+                }
+            }
+        },
+        _ =>
+        {
+            let err = io::Error::new(io::ErrorKind::Other, format!("endianness fix not implemented for dxt bc format: {:?}", format));
+            return Err(Box::new(err));
+        }
+    };
+
+    Ok(())
 }
 
 static IMAGE_FORMAT_INFO_MAP: Lazy<HashMap<ImageFormat, image_format_info>> = Lazy::new(|| {
