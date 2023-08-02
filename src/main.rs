@@ -1,9 +1,11 @@
+use std::cmp;
 use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::io::Read;
+use std::io::Write;
 use std::mem;
 use std::path::Path;
 use std::process::exit;
@@ -12,6 +14,7 @@ use image::DynamicImage;
 use image::GenericImage;
 use image::GenericImageView;
 use image::Rgba;
+use image::codecs::dxt;
 use image_format::correct_dxt_endianness;
 use vtfx::VTFXHEADER;
 use std::convert::TryInto;
@@ -120,17 +123,12 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
     let res_start: usize = resource_entry_info.resData.try_into()?;
     //Copy input buffer
     let mut resource_buffer = Vec::from(&buffer[res_start..buffer.len()]);
-    
-    let mut output_image = DynamicImage::new_rgba8(vtfx.width.into(), vtfx.height.into());
     let image_format = &vtfx.image_format;
     let format_info = image_format.get_format_info();
     if format_info.is_some()
     {
         let format_info_u = format_info.unwrap();
-        let channels = match vtfx.has_alpha() {
-            true => 4,
-            false => 3
-        };
+        let channels = format_info_u.channels as u32;
         let size: u32 = channels * vtfx.width as u32 * vtfx.height as u32;
         let mut image_vec: Vec<u8>;
 
@@ -172,10 +170,24 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
             image_vec = resource_buffer;
         }
 
+        //Keep resouce width
+        let output_width = vtfx.width as u32;
+
         //Take decompressed data and put into image
-        let width = vtfx.width as u32;
-        let height = vtfx.height as u32;
+        let mut width = vtfx.width as u32;
+        let mut height = vtfx.height as u32;
         let depth = format_info_u.depth as u32;
+        let mut output_offset: usize = 0;
+        
+        if true
+        {
+            output_offset = 408925 * 4;//vtfx.get_mip0_start() + 7 * 4;
+            width = 1024;
+            height = 1024;
+            println!("    Image resource contains multiple mip map levels, will output mip0 at size {} x {} ({}% of total resource)", width, height, 1f32 - (output_offset as f32 / image_vec.len() as f32));
+        }
+
+        let mut output_image = DynamicImage::new_rgba8(width, height);
 
         if image_vec.len() != size as usize
         {
@@ -183,36 +195,53 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
             return Err(Box::new(err));
         }
 
+        let mut c = -1;
         for y in 0..height
         {
             for x in 0..width
             {
-                let mut pixel: Rgba<u8> = Rgba([1;4]);
-                let pixel_index: u32 = (x + y * width) * (depth * format_info_u.channels as u32);
-                for channel in 0..channels.try_into()?
+                let mut pixel: Rgba<u8> = Rgba([255;4]);
+                //Index of pixel data to read from decoded output
+                let pixel_index: u32 = output_offset as u32 + ((x + y * width) * (depth * channels));
+                for channel in 0..channels as usize
                 {
                     //Using format data, construct index and copy source image pixel colour data
                     let channel_offset = format_info_u.channel_order[channel] as u32;
-                    let from_index: usize = (pixel_index + (channel_offset * depth)).try_into()?;
+                    //Add channel offset to pixel index.
+                    let from_index: usize = (pixel_index + (channel_offset * depth)) as usize;
 
-                    if (pixel_index as usize) < image_vec.len()
+                    if from_index < image_vec.len()
                     {
                         pixel[channel] = get_pixel_as_u8(&image_vec, from_index, &format_info_u.depth)?;
                     }
                 }
                 //Currenty alpha is messed up
                 pixel[3] = 255;
-                output_image.put_pixel(x, y, pixel);
+
+                //try to remove weird offset of pixels
+                let mut _y = y;
+                if y != 0
+                {
+                    _y = match c < 2 {
+                        true => y + 2,
+                        false => y - 2
+                    };
+                }
+                _y = cmp::min(_y, height - 1);
+                output_image.put_pixel(x, _y, pixel);
             }
+
+            c += 1;
+            if c >= 4 { c = 0; }
         }
+
+        Ok(output_image)
     }
     else
     {
         let err = io::Error::new(io::ErrorKind::Other, format!("Unsupported image format: {:?}", image_format));
         return Err(Box::new(err));
     }
-
-    Ok(output_image)
 }
 
 //Decompress resource that is compressed via lzma

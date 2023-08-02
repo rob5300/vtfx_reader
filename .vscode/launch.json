@@ -9,7 +9,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/vtfx_reader.exe",
-            "args": ["${workspaceFolder}/test/scout_blue.360.vtf"],
+            "args": ["${workspaceFolder}/test/scout_head.360.vtf"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [{"name": "RUST_BACKTRACE", "value": "1"}],

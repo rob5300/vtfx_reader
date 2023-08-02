@@ -111,7 +111,7 @@ impl image_format_info
     }
 }
 
-//Correct endianness of dxt bc data
+///Correct endianness of dxt bc data
 pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Result<(), Box<dyn Error>>
 {
     //https://stackoverflow.com/questions/67066835/how-to-decompress-a-bc3-unorm-dds-texture-format
@@ -122,17 +122,43 @@ pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Re
         uint32_t    bitmap; // 2bpp rgb bitmap
     };
 
-    static_assert(sizeof(BC1) == 8, "Mismatch block size");
-
     struct BC3
     {
         uint8_t     alpha[2];   // alpha values
         uint8_t     bitmap[6];  // 3bpp alpha bitmap
         BC1         bc1;        // BC1 rgb data
     };
-
-    static_assert(sizeof(BC3) == 16, "Mismatch block size");
     */
+
+    ///bc1 block fixer
+    fn fix_bc1(block: &mut [u8]) -> Result<(), Box<dyn Error>>
+    {
+        let rgb_index: usize = 0;
+        let bitmap_index = rgb_index + 4;
+        
+        //rgb data fix (u16[2]])
+        for i in 0..2
+        {
+            let index = rgb_index + (2 * i);
+            let u16 = u16::from_be_bytes(block[index..index + 2].try_into()?);
+            let u16_bytes = u16.to_le_bytes();
+            
+            for j in 0..u16_bytes.len()
+            {
+                block[index + j] = u16_bytes[j];
+            }
+        }
+
+        //bitmap u32 fix
+        let bitmap: u32 = u32::from_be_bytes(block[bitmap_index..bitmap_index + 4].try_into()?);
+        let bitmap_bytes = bitmap.to_le_bytes();
+        for i in 0..4
+        {
+            block[bitmap_index + i] = bitmap_bytes[i];
+        }
+
+        Ok(())
+    }
 
     match format {
         texpresso::Format::Bc3 => 
@@ -145,31 +171,17 @@ pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Re
 
             for block in data.chunks_mut(16)
             {
-                let rgb_index: usize = 8;
-                let bitmap_index: usize = 12;
-                
-                //rgb data fix (u16[2]])
-                for i in 0..2
-                {
-                    let index = rgb_index + (2 * i);
-                    let u16 = u16::from_be_bytes(block[index..index + 2].try_into()?);
-                    let u16_bytes = u16.to_le_bytes();
-                    
-                    for j in 0..u16_bytes.len()
-                    {
-                        block[index + j] = u16_bytes[j];
-                    }
-                }
-
-                //bitmap u32 fix
-                let bitmap: u32 = u32::from_be_bytes(block[bitmap_index..bitmap_index + 4].try_into()?);
-                let bitmap_bytes = bitmap.to_le_bytes();
-                for i in 0..4
-                {
-                    block[bitmap_index + i] = bitmap_bytes[i];
-                }
+                //Use bc1 fix on the last part of the block
+                fix_bc1(&mut block[8..16])?;
             }
         },
+        texpresso::Format::Bc1 =>
+        {
+            for block in data.chunks_mut(8)
+            {
+                fix_bc1(block)?;
+            }
+        }
         _ =>
         {
             let err = io::Error::new(io::ErrorKind::Other, format!("endianness fix not implemented for dxt bc format: {:?}", format));

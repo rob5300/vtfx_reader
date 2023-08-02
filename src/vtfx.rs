@@ -132,6 +132,16 @@ impl VTFXHEADER
         resource_entry_infos
     }
 
+    pub fn get_channels(&self) -> u16
+    {
+        if self.has_alpha()
+        {
+            return 4;
+        }
+
+        return 3;
+    }
+
     pub fn has_alpha(&self) -> bool
     {
         (self.flags & 0x2000) != 0
@@ -142,22 +152,79 @@ impl VTFXHEADER
         (self.flags & 0x1000) != 0
     }
 
+    pub fn all_mips(&self) -> bool
+    {
+        (self.flags & 0x00000400) != 0
+    }
+
+    pub fn no_mips(&self) -> bool
+    {
+        (self.flags & 0x00000100) != 0
+    }
+
     pub fn hint_dx5(&self) -> bool
     {
         (self.flags & 0x0020) != 0
     }
+
+    /// Get start of largest mip (width / 2, height / 2)
+    pub fn get_mip0_start(&self) -> usize
+    {
+        let mut lower_mip_sizes: usize = 0;
+
+        let mut width: usize = (self.width >> 1) as usize;
+        let mut height: usize = (self.height >> 1) as usize;
+
+        while width > 0 || height > 0
+        {
+            lower_mip_sizes += (width * height) * (self.get_channels() * self.depth) as usize;
+            width = width >> 1;
+            height = height >> 1;
+        }
+
+        lower_mip_sizes
+    }
+    /*
+    pub fn ComputeMipLevelSubRect( Rect_t *pSrcRect, int nMipLevel, Rect_t *pSubRect )
+    {
+        Assert( pSrcRect->x >= 0 && pSrcRect->y >= 0 && 
+            (pSrcRect->x + pSrcRect->width <= m_nWidth) &&  
+            (pSrcRect->y + pSrcRect->height <= m_nHeight) );
+        
+        if (nMipLevel == 0)
+        {
+            *pSubRect = *pSrcRect;
+            return;
+        }
+
+        float flInvShrink = 1.0f / (float)(1 << nMipLevel);
+        pSubRect->x = ( int )( pSrcRect->x * flInvShrink );
+        pSubRect->y = ( int )( pSrcRect->y * flInvShrink );
+        pSubRect->width = (int)ceil( (pSrcRect->x + pSrcRect->width) * flInvShrink ) - pSubRect->x;
+        pSubRect->height = (int)ceil( (pSrcRect->y + pSrcRect->height) * flInvShrink ) - pSubRect->y;
+    }
+    */
 }
 
 impl fmt::Display for VTFXHEADER {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(Version: {}.{}, Header Size: {}, Width: {}, Height: {}, Depth: {}, Num Frames: {}, Preload data size: {}, Mip skip count: {}, Bump Scale: {}, Image Format: {:?}, Compressed Size: {})",
-            self.version[0], self.version[1], self.header_size, self.width, self.height, self.depth, self.num_frames, self.preload_data_size, self.mip_skip_count, self.bump_scale, self.image_format, self.compressed_size)
+        write!(f, "(Version: {}.{}, Header Size: {}, Width: {}, Height: {}, Depth: {}, Num Frames: {}, Preload data size: {}, Mip skip count: {}, Bump Scale: {}, Image Format: {:?}, Compressed Size: {} | All mip: {}, No mip: {})",
+            self.version[0], self.version[1], self.header_size, self.width, self.height, self.depth, self.num_frames, self.preload_data_size, self.mip_skip_count, self.bump_scale, self.image_format, self.compressed_size, self.all_mips(), self.no_mips())
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct Vector {
     x: f32,
     y: f32,
     z: f32,
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub struct Rect
+{
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32
 }
