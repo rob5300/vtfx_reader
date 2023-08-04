@@ -7,7 +7,7 @@ use num_enum::TryFromPrimitive;
 
 #[derive(Debug, Default, PartialEq, TryFromPrimitive, Eq, Hash)]
 #[repr(i32)]
-#[allow(non_camel_case_types)] //Keep enums same as source
+#[allow(non_camel_case_types, non_upper_case_globals)] //Keep enums same as source
 //https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/bitmap/imageformat.h#L35
 pub enum ImageFormat 
 {

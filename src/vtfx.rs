@@ -177,7 +177,8 @@ impl VTFXHEADER
 
         while width > 0 || height > 0
         {
-            lower_mip_sizes += (width * height) * (self.get_channels() * self.depth) as usize;
+            let mip_size = (width * height) * (self.get_channels() * self.depth) as usize;
+            lower_mip_sizes += mip_size;
             width = width >> 1;
             height = height >> 1;
         }

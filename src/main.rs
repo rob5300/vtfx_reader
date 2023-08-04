@@ -1,29 +1,21 @@
-use std::cmp;
 use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::io::Read;
-use std::io::Write;
-use std::mem;
 use std::path::Path;
 use std::process::exit;
-use std::str;
 use image::DynamicImage;
 use image::GenericImage;
-use image::GenericImageView;
 use image::Rgba;
-use image::codecs::dxt;
 use image_format::correct_dxt_endianness;
 use vtfx::VTFXHEADER;
 use std::convert::TryInto;
-use num_enum::TryFromPrimitive;
 
 use crate::image_format::ImageFormat;
 use crate::resource_entry_info::ResourceEntryInfo;
 use crate::vtfx::VTF_LEGACY_RSRC_IMAGE;
-use crate::vtfx::Vector;
 
 mod vtfx;
 mod image_format;
@@ -40,7 +32,7 @@ fn main() {
         let mut buffer = String::new();
         let stdin = io::stdin();
         match stdin.read_line(&mut buffer) {
-            Err(e) => println!("Input not valid"),
+            Err(_e) => println!("Input not valid"),
             Ok(_) => (),
         }
         //Remove trailing new line chars
@@ -69,6 +61,7 @@ fn main() {
 
 }
 
+///Open a vtfx file at path and read its data
 fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     let f = File::open(path)?;
     let mut reader = BufReader::new(f);
@@ -118,6 +111,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     Ok(vtfx)
 }
 
+///Extract image resource and return it as DynamicImage
 fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtfx: &VTFXHEADER) -> Result<DynamicImage, Box<dyn Error>>
 {
     let res_start: usize = resource_entry_info.resData.try_into()?;
@@ -179,9 +173,10 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
         let depth = format_info_u.depth as u32;
         let mut output_offset: usize = 0;
         
-        if true
+        if false
         {
-            output_offset = 408925 * 4;//vtfx.get_mip0_start() + 7 * 4;
+            output_offset = 408925 * 4;
+            if cfg!(debug_assertions) { println!("Offset {},  diff: {}", vtfx.get_mip0_start(), output_offset - vtfx.get_mip0_start()); }
             width = 1024;
             height = 1024;
             println!("    Image resource contains multiple mip map levels, will output mip0 at size {} x {} ({}% of total resource)", width, height, 1f32 - (output_offset as f32 / image_vec.len() as f32));
@@ -195,14 +190,14 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
             return Err(Box::new(err));
         }
 
-        let mut c = -1;
+        let row_length: u32 = output_width * depth * channels;
         for y in 0..height
         {
             for x in 0..width
             {
                 let mut pixel: Rgba<u8> = Rgba([255;4]);
                 //Index of pixel data to read from decoded output
-                let pixel_index: u32 = output_offset as u32 + ((x + y * width) * (depth * channels));
+                let pixel_index: u32 = output_offset as u32 + ((x + y * width) * depth * channels);
                 for channel in 0..channels as usize
                 {
                     //Using format data, construct index and copy source image pixel colour data
@@ -219,20 +214,12 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                 pixel[3] = 255;
 
                 //try to remove weird offset of pixels
-                let mut _y = y;
-                if y != 0
+                let mut _y = (y as i32 + get_y_offset(pixel_index / row_length)) as u32;
+                if x < width && _y < height
                 {
-                    _y = match c < 2 {
-                        true => y + 2,
-                        false => y - 2
-                    };
+                    output_image.put_pixel(x, _y, pixel);
                 }
-                _y = cmp::min(_y, height - 1);
-                output_image.put_pixel(x, _y, pixel);
             }
-
-            c += 1;
-            if c >= 4 { c = 0; }
         }
 
         Ok(output_image)
@@ -244,7 +231,7 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
     }
 }
 
-//Decompress resource that is compressed via lzma
+///Decompress resource that is compressed via lzma. Creates new buffer with new header.
 fn decompress_lzma(resource_buffer: &mut Vec<u8>, expected_compressed_size: usize, vtfx: &VTFXHEADER) -> Result<Vec<u8>, Box<dyn Error>>
 {
     //Read data from valves lzma header
@@ -310,6 +297,7 @@ fn get_pixel_as_u8(in_buffer: &Vec<u8>, index: usize, depth: &u16) -> Result<u8,
     }
 }
 
+/// Get lzma properties same way as source 2013
 fn get_valve_lzma_properties(prop0: &mut u8, pb: &mut i32, lp: &mut i32, lc: &mut i32) 
 {
     while pb < &mut 5 && prop0 >= & mut(9 * 5){
@@ -324,4 +312,18 @@ fn get_valve_lzma_properties(prop0: &mut u8, pb: &mut i32, lp: &mut i32, lc: &mu
     }
 
     *lc = *prop0 as i32;
+}
+
+fn get_y_offset(y: u32) -> i32
+{
+    if y == 0
+    {
+        return 0;
+    }
+
+    let seg = y % 4;
+    return match seg < 2 {
+        true => 2,
+        false => -2
+    };
 }
