@@ -150,6 +150,8 @@ pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Re
         }
 
         //bitmap u32 fix
+        //TODO: Correct fix (is actually 4x4 2 bit lookup table)
+        //https://learn.microsoft.com/en-us/windows/win32/direct3d10/d3d10-graphics-programming-guide-resources-block-compression#bc1
         let bitmap: u32 = u32::from_be_bytes(block[bitmap_index..bitmap_index + 4].try_into()?);
         let bitmap_bytes = bitmap.to_le_bytes();
         for i in 0..4
@@ -165,11 +167,11 @@ pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Re
         {
             if data.len() % 16 != 0
             {
-                let err = io::Error::new(io::ErrorKind::Other, format!("Length of dxt buffer should be multiple of 16. Length: {}", data.len()));
+                let err = io::Error::new(io::ErrorKind::Other, format!("Length of dxt5 buffer should be multiple of 16. Length: {}", data.len()));
                 return Err(Box::new(err));
             }
 
-            for block in data.chunks_mut(16)
+            for block in data.chunks_exact_mut(16)
             {
                 //Use bc1 fix on the last part of the block
                 fix_bc1(&mut block[8..16])?;
@@ -177,7 +179,13 @@ pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Re
         },
         texpresso::Format::Bc1 =>
         {
-            for block in data.chunks_mut(8)
+            if data.len() % 8 != 0
+            {
+                let err = io::Error::new(io::ErrorKind::Other, format!("Length of dxt1 buffer should be multiple of 8. Length: {}", data.len()));
+                return Err(Box::new(err));
+            }
+
+            for block in data.chunks_exact_mut(8)
             {
                 fix_bc1(block)?;
             }

@@ -1,15 +1,18 @@
-use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::io::Read;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::exit;
+use args::Args;
+use clap::Parser;
 use image::DynamicImage;
 use image::GenericImage;
 use image::Rgba;
 use image_format::correct_dxt_endianness;
+use once_cell::sync::Lazy;
 use vtfx::VTFXHEADER;
 use std::convert::TryInto;
 
@@ -20,45 +23,31 @@ use crate::vtfx::VTF_LEGACY_RSRC_IMAGE;
 mod vtfx;
 mod image_format;
 mod resource_entry_info;
+mod args;
 
-const LZMA_MAGIC: &[u8;4] = b"LZMA"; //LZMA
+const LZMA_MAGIC: &[u8;4] = b"LZMA";
+static ARGS: Lazy<Args> = Lazy::new(|| { Args::parse() });
 
 fn main() {
-    let mut args: Vec<String> = env::args().collect();
+    println!("VTFX Reader");
 
-    if args.len() == 1 {
-        println!("VTFX Reader");
-        println!("Enter path of file:");
-        let mut buffer = String::new();
-        let stdin = io::stdin();
-        match stdin.read_line(&mut buffer) {
-            Err(_e) => println!("Input not valid"),
-            Ok(_) => (),
-        }
-        //Remove trailing new line chars
-        if buffer.ends_with('\n') {
-            buffer.pop();
-            if buffer.ends_with('\r') {
-                buffer.pop();
-            }
-        }
-        buffer = buffer.replace("\"", "");
-        //Check path is file
-        let path = Path::new(&buffer);
-
-        if path.is_file() {
-            args.push(buffer);
-        } else {
-            println!("Provided path '{}' is not a file!", buffer);
-            return;
-        }
+    if !ARGS.input.exists() {
+        println!("Error: No input file given. Run with --help to see arguments.");
+        exit(1);
     }
 
-    match read_vtfx(Path::new(&args[1])) {
+    //Check path is file
+    let path = Path::new(&ARGS.input);
+
+    if !path.is_file() {
+        println!("Provided path '{}' is not a file!", ARGS.input.as_os_str().to_string_lossy());
+        return;
+    }
+
+    match read_vtfx(&path) {
         Ok(_) => {println!("VTFX processing complete")},
         Err(e) => {println!("Failed to open file: {e}")},
     };
-
 }
 
 ///Open a vtfx file at path and read its data
@@ -90,21 +79,29 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
         {
             println!("    Type is VTF_LEGACY_RSRC_IMAGE");
 
-            match resource_to_image(&buffer, &resource, &vtfx) {
-                Ok(image) => {
-                    let filename = path.file_stem().unwrap().to_str().unwrap();
-                    let new_image_name = format!("{filename}_resource_{res_num}.png");
-                    println!("    Saved resource image data to '{}'", new_image_name);
-                    image.save_with_format(new_image_name, image::ImageFormat::Png)?;
-                },
-                Err(error) => {println!("    {}", error)},
+            if !ARGS.no_resource_export
+            {
+                match resource_to_image(&buffer, &resource, &vtfx) {
+                    Ok(image) => {
+                        let filename = path.file_stem().unwrap().to_str().unwrap();
+                        let new_image_name = format!("{filename}_resource_{res_num}.png");
+                        let save_path = &match ARGS.output.is_some()
+                        {
+                            true => ARGS.output.as_ref().unwrap().clone().join(&new_image_name),
+                            false => PathBuf::from(&new_image_name)
+                        };
+                        image.save_with_format(save_path, image::ImageFormat::Png)?;
+                        println!("    Saved resource image data to '{}'", save_path.as_path().to_string_lossy());
+                    },
+                    Err(error) => {println!("    Resource to image error: {}", error)},
+                }
             }
             
             res_num += 1;
         }
         else
         {
-            println!("Error: Unknown type, skipping...");
+            println!("Error: Unknown resource type, skipping...");
         }
     }
 
@@ -153,7 +150,14 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                 }
             }
 
-            correct_dxt_endianness(&bc_format, &mut resource_buffer)?;
+            if !ARGS.no_dxt_fix
+            {
+                correct_dxt_endianness(&bc_format, &mut resource_buffer)?;
+            }
+            else
+            {
+                println!("! Will skip applying dxt endian fix !")
+            }
 
             //Decompress dxt image, if its still compressed this will fail
             bc_format.decompress(resource_buffer.as_mut_slice(), vtfx.width.into(), vtfx.height.into(), image_vec_slice);
@@ -173,13 +177,13 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
         let depth = format_info_u.depth as u32;
         let mut output_offset: usize = 0;
         
-        if false
+        if ARGS.mip0_only
         {
             output_offset = 408925 * 4;
             if cfg!(debug_assertions) { println!("Offset {},  diff: {}", vtfx.get_mip0_start(), output_offset - vtfx.get_mip0_start()); }
             width = 1024;
             height = 1024;
-            println!("    Image resource contains multiple mip map levels, will output mip0 at size {} x {} ({}% of total resource)", width, height, 1f32 - (output_offset as f32 / image_vec.len() as f32));
+            println!("    Image resource output will try to just be mip0 at size {} x {} ({}% of total resource)", width, height, 1f32 - (output_offset as f32 / image_vec.len() as f32));
         }
 
         let mut output_image = DynamicImage::new_rgba8(width, height);
@@ -188,6 +192,11 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
         {
             let err = io::Error::new(io::ErrorKind::Other, format!("decoded image data is wrong size. Expected: {}, Got: {}", size, image_vec.len()));
             return Err(Box::new(err));
+        }
+
+        if ARGS.no_lines_fix
+        {
+            println!("! Will not apply line fix !")
         }
 
         let row_length: u32 = output_width * depth * channels;
@@ -213,8 +222,13 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                 //Currenty alpha is messed up
                 pixel[3] = 255;
 
-                //try to remove weird offset of pixels
-                let mut _y = (y as i32 + get_y_offset(pixel_index / row_length)) as u32;
+                let mut _y = y;
+                if !ARGS.no_lines_fix
+                {
+                    //Apply fix to correctly arrange pixel rows
+                    _y = (y as i32 + get_y_offset(pixel_index / row_length)) as u32;
+                }
+                
                 if x < width && _y < height
                 {
                     output_image.put_pixel(x, _y, pixel);
