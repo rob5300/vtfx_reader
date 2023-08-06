@@ -114,23 +114,9 @@ impl image_format_info
 ///Correct endianness of dxt bc data
 pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Result<(), Box<dyn Error>>
 {
-    //https://stackoverflow.com/questions/67066835/how-to-decompress-a-bc3-unorm-dds-texture-format
-    /*
-    struct BC1
-    {
-        uint16_t    rgb[2]; // 565 colors
-        uint32_t    bitmap; // 2bpp rgb bitmap
-    };
+    //https://learn.microsoft.com/en-us/windows/win32/direct3d10/d3d10-graphics-programming-guide-resources-block-compression#bc1
 
-    struct BC3
-    {
-        uint8_t     alpha[2];   // alpha values
-        uint8_t     bitmap[6];  // 3bpp alpha bitmap
-        BC1         bc1;        // BC1 rgb data
-    };
-    */
-
-    ///bc1 block fixer
+    ///Fix single block of bc1 data
     fn fix_bc1(block: &mut [u8]) -> Result<(), Box<dyn Error>>
     {
         let rgb_index: usize = 0;
@@ -150,7 +136,6 @@ pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Re
         }
 
         //bitmap u32 fix (treat as u16[2])
-        //https://learn.microsoft.com/en-us/windows/win32/direct3d10/d3d10-graphics-programming-guide-resources-block-compression#bc1
         for i in 0..2
         {
             let index = bitmap_index + (i * 2);

@@ -252,8 +252,12 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                         pixel[channel] = get_pixel_as_u8(&image_vec, from_index, &format_info_u.depth)?;
                     }
                 }
-                //Currenty alpha is messed up
-                pixel[3] = 255;
+                
+                //Override alpha if not explicitly enabled
+                if !ARGS.export_alpha
+                {
+                    pixel[3] = 255;
+                }
                 
                 if x < width && y < height
                 {

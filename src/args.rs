@@ -13,6 +13,10 @@ pub struct Args {
     #[arg(short, long)]
     pub output: Option<PathBuf>,
 
+    /// Export alpha channel
+    #[arg(long, default_value_t = false)]
+    pub export_alpha: bool,
+
     /// Try to output only mip 0 (EXPERIMENTAL)
     #[arg(long, default_value_t = false)]
     pub mip0_only: bool,
