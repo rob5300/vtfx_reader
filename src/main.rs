@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
@@ -39,16 +40,49 @@ fn main() {
     //Check path is file
     let path = Path::new(&ARGS.input);
 
-    if !path.is_file() {
-        println!("Provided path '{}' is not a file!", ARGS.input.as_os_str().to_string_lossy());
+    if !path.exists() {
+        println!("Provided path '{}' does not exist!", ARGS.input.as_os_str().to_string_lossy());
         return;
     }
 
-    println!("Opening '{}'...", path.to_string_lossy());
-    match read_vtfx(&path) {
-        Ok(_) => {println!("VTFX processing complete")},
-        Err(e) => {println!("Failed to open file: {e}")},
-    };
+    if path.is_file()
+    {
+        println!("Opening '{}'...", path.to_string_lossy());
+        match read_vtfx(&path) {
+            Ok(_) => {println!("VTFX processing complete")},
+            Err(e) => {println!("Failed to open file: {e}")},
+        };
+    }
+    else if path.is_dir()
+    {
+        println!("Will open all vtf files in given folder");
+        match read_all_vtfx_in_folder(&path) {
+            Ok(_) => {},
+            Err(e) => {println!("Failed to process all files in input folder: {e}")},
+        }
+    }
+}
+
+fn read_all_vtfx_in_folder(path: &Path) -> Result<(), Box<dyn Error>>
+{
+    for file in fs::read_dir(path)?
+    {
+        let path = file?.path();
+        if path.is_dir()
+        {
+            read_all_vtfx_in_folder(path.as_path())?;
+        }
+        else
+        {
+            println!("Opening '{}'...", path.to_string_lossy());
+            match read_vtfx(&path) {
+                Ok(_) => {println!("VTFX processing complete")},
+                Err(e) => {println!("Failed to open file: {e}")},
+            };
+        }
+    }
+
+    Ok(())
 }
 
 ///Open a vtfx file at path and read its data
@@ -151,10 +185,10 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                     //Decompress and replace resource buffer
                     resource_buffer = decompress_lzma(&mut resource_buffer, expected_compressed_size, vtfx)?;
                 }
-                else
+                else if resource_buffer.len() < expected_compressed_size
                 {
-                    println!("WARN: Resource size is {} but expected length is {}. ({} % diff) Program would crash.", resource_buffer.len(), expected_compressed_size, (resource_buffer.len() as f32 / expected_compressed_size as f32) * 100f32);
-                    exit(1);
+                    let size_error = io::Error::new(io::ErrorKind::InvalidInput, format!("resource size is {} but expected length is {}, resource cannot decoded", resource_buffer.len(), expected_compressed_size));
+                    return Err(Box::new(size_error));
                 }
             }
 
