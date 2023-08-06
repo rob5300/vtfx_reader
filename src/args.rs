@@ -21,11 +21,11 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub no_dxt_fix: bool,
 
-    /// Do not apply line artifact fix
-    #[arg(long, default_value_t = false)]
-    pub no_lines_fix: bool,
-
     /// Do not export any resources
     #[arg(long, default_value_t = false)]
     pub no_resource_export: bool,
+
+    /// Auto open exported images
+    #[arg(long, default_value_t = false)]
+    pub open: bool,
 }

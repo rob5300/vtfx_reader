@@ -149,15 +149,32 @@ pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Re
             }
         }
 
-        //bitmap u32 fix
-        //TODO: Correct fix (is actually 4x4 2 bit lookup table)
+        //bitmap u32 fix (treat as u16[2])
         //https://learn.microsoft.com/en-us/windows/win32/direct3d10/d3d10-graphics-programming-guide-resources-block-compression#bc1
-        let bitmap: u32 = u32::from_be_bytes(block[bitmap_index..bitmap_index + 4].try_into()?);
-        let bitmap_bytes = bitmap.to_le_bytes();
+        for i in 0..2
+        {
+            let index = bitmap_index + (i * 2);
+            let bitmap: u16 = u16::from_be_bytes(block[index..index + 2].try_into()?);
+            let bitmap_bytes = bitmap.to_le_bytes();
+            for x in 0..2
+            {
+                block[index + x] = bitmap_bytes[x];
+            }
+        }
+        
+        //Reverse bitmap indexes
+        /*
         for i in 0..4
         {
-            block[bitmap_index + i] = bitmap_bytes[i];
+            let byte = &block[bitmap_index + i];
+            let mut new_byte = 0u8;
+            new_byte |= (0b00000011 & byte) << 6;
+            new_byte |= (0b00001100 & byte) << 2;
+            new_byte |= (0b00110000 & byte) >> 2;
+            new_byte |= (0b11000000 & byte) >> 6;
+            block[bitmap_index + i] = new_byte;
         }
+        */
 
         Ok(())
     }

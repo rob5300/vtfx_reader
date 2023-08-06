@@ -5,6 +5,7 @@ use std::io::BufReader;
 use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::Command;
 use std::process::exit;
 use args::Args;
 use clap::Parser;
@@ -44,6 +45,7 @@ fn main() {
         return;
     }
 
+    println!("Opening '{}'...", path.to_string_lossy());
     match read_vtfx(&path) {
         Ok(_) => {println!("VTFX processing complete")},
         Err(e) => {println!("Failed to open file: {e}")},
@@ -64,7 +66,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     if cfg!(debug_assertions) && dxt_hint
     {
         println!("[Debug] Has dxt5 hint flag");
-    }  
+    }
 
     println!("{}", vtfx);
 
@@ -92,6 +94,12 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
                         };
                         image.save_with_format(save_path, image::ImageFormat::Png)?;
                         println!("    Saved resource image data to '{}'", save_path.as_path().to_string_lossy());
+
+                        if ARGS.open
+                        {
+                            println!("    Opening image...");
+                            opener::open(save_path.as_path())?;
+                        }
                     },
                     Err(error) => {println!("    Resource to image error: {}", error)},
                 }
@@ -194,12 +202,6 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
             return Err(Box::new(err));
         }
 
-        if ARGS.no_lines_fix
-        {
-            println!("! Will not apply line fix !")
-        }
-
-        let row_length: u32 = output_width * depth * channels;
         for y in 0..height
         {
             for x in 0..width
@@ -221,17 +223,10 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                 }
                 //Currenty alpha is messed up
                 pixel[3] = 255;
-
-                let mut _y = y;
-                if !ARGS.no_lines_fix
-                {
-                    //Apply fix to correctly arrange pixel rows
-                    _y = (y as i32 + get_y_offset(pixel_index / row_length)) as u32;
-                }
                 
-                if x < width && _y < height
+                if x < width && y < height
                 {
-                    output_image.put_pixel(x, _y, pixel);
+                    output_image.put_pixel(x, y, pixel);
                 }
             }
         }
