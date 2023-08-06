@@ -217,9 +217,80 @@ pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Re
     Ok(())
 }
 
+#[allow(non_snake_case)]
+pub fn GetNumMipMapLevels(mut width: i32, mut height: i32, mut depth: i32) -> i32
+{
+	if depth <= 0
+	{
+		depth = 1;
+	}
+
+	if width < 1 || height < 1 || depth < 1
+    {
+        return 0;
+    }
+
+	let mut numMipLevels = 1;
+	loop
+	{
+		if width == 1 && height == 1 && depth == 1
+        {
+            break;
+        }
+
+		width >>= 1;
+		height >>= 1;
+		depth >>= 1;
+        
+		if width < 1
+		{
+			width = 1;
+		}
+
+		if height < 1
+		{
+			height = 1;
+		}
+
+		if depth < 1
+		{
+			depth = 1;
+		}
+		numMipLevels += 1;
+	}
+	return numMipLevels;
+}
+
+pub fn GetMipMapLevelByteOffset(mut width: i32, mut height: i32, image_format: &image_format_info, mut skip_mip_levels: i32) -> usize
+{
+	let mut offset: usize = 0;
+
+	while skip_mip_levels > 0
+	{
+		offset += (width * height * (image_format.depth * image_format.channels) as i32) as usize;
+		if width == 1 && height == 1
+		{
+			break;
+		}
+
+		width >>= 1;
+		height >>= 1;
+		if width < 1 
+		{
+			width = 1;
+		}
+		if height < 1 
+		{
+			height = 1;
+		}
+		skip_mip_levels -= 1;
+	}
+	return offset;
+}
+
 static IMAGE_FORMAT_INFO_MAP: Lazy<HashMap<ImageFormat, image_format_info>> = Lazy::new(|| {
     let mut map = HashMap::new();
-    map.insert(ImageFormat::IMAGE_FORMAT_DXT1, image_format_info::new_with_bc(3, 1, vec![0,1,2], Option::from(texpresso::Format::Bc1)));
+    map.insert(ImageFormat::IMAGE_FORMAT_DXT1, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc1)));
     map.insert(ImageFormat::IMAGE_FORMAT_DXT5, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc3)));
     map.insert(ImageFormat::IMAGE_FORMAT_RGBA16161616, image_format_info::new_with_bc(4, 2, vec![0,1,2,3], Option::None));
     return map;

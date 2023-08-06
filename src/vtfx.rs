@@ -8,7 +8,7 @@ use std::{error::Error, mem, io, fmt};
 
 use num_enum::TryFromPrimitive;
 
-use crate::{ImageFormat, resource_entry_info::ResourceEntryInfo};
+use crate::{ImageFormat, resource_entry_info::ResourceEntryInfo, image_format::GetNumMipMapLevels};
 
 const RESOURCE_START: usize = 60;
 
@@ -33,6 +33,7 @@ pub struct VTFXHEADER {
     pub image_format: ImageFormat,
     pub low_res_image_sample: [u8; 4],
     pub compressed_size: u32,
+    pub mip_count: i32,
 }
 
 impl VTFXHEADER
@@ -109,6 +110,11 @@ impl VTFXHEADER
 
         if cfg!(debug_assertions){ println!("[Debug] VTFX READ END: Current read position: {}, Data left: {} bytes.\n", i, buffer.len() - i); }
 
+        vtfx.mip_count = match vtfx.no_mips() {
+            true => 1,
+            false => GetNumMipMapLevels(vtfx.width as i32, vtfx.height as i32, vtfx.depth as i32)
+        };
+
         Ok(vtfx)
     }
 
@@ -170,6 +176,7 @@ impl VTFXHEADER
     /// Get start of largest mip (width / 2, height / 2)
     pub fn get_mip0_start(&self) -> usize
     {
+        let mut mips = 0;
         let mut lower_mip_sizes: usize = 0;
 
         let mut width: usize = (self.width >> 1) as usize;
@@ -181,36 +188,18 @@ impl VTFXHEADER
             lower_mip_sizes += mip_size;
             width = width >> 1;
             height = height >> 1;
+            mips += 1;
         }
 
+        println!("Mip count: {}. Header count: {}", mips, self.mip_count);
         lower_mip_sizes
     }
-    /*
-    pub fn ComputeMipLevelSubRect( Rect_t *pSrcRect, int nMipLevel, Rect_t *pSubRect )
-    {
-        Assert( pSrcRect->x >= 0 && pSrcRect->y >= 0 && 
-            (pSrcRect->x + pSrcRect->width <= m_nWidth) &&  
-            (pSrcRect->y + pSrcRect->height <= m_nHeight) );
-        
-        if (nMipLevel == 0)
-        {
-            *pSubRect = *pSrcRect;
-            return;
-        }
-
-        float flInvShrink = 1.0f / (float)(1 << nMipLevel);
-        pSubRect->x = ( int )( pSrcRect->x * flInvShrink );
-        pSubRect->y = ( int )( pSrcRect->y * flInvShrink );
-        pSubRect->width = (int)ceil( (pSrcRect->x + pSrcRect->width) * flInvShrink ) - pSubRect->x;
-        pSubRect->height = (int)ceil( (pSrcRect->y + pSrcRect->height) * flInvShrink ) - pSubRect->y;
-    }
-    */
 }
 
 impl fmt::Display for VTFXHEADER {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(Version: {}.{}, Header Size: {}, Width: {}, Height: {}, Depth: {}, Num Frames: {}, Preload data size: {}, Mip skip count: {}, Bump Scale: {}, Image Format: {:?}, Compressed Size: {} | All mip: {}, No mip: {})",
-            self.version[0], self.version[1], self.header_size, self.width, self.height, self.depth, self.num_frames, self.preload_data_size, self.mip_skip_count, self.bump_scale, self.image_format, self.compressed_size, self.all_mips(), self.no_mips())
+        write!(f, "(Version: {}.{}, Header Size: {}, Width: {}, Height: {}, Depth: {}, Num Frames: {}, Preload data size: {}, Mip count: {}, Mip skip count: {}, Bump Scale: {}, Image Format: {:?}, Compressed Size: {} | All mip: {}, No mip: {}, Has Alpha: {})",
+            self.version[0], self.version[1], self.header_size, self.width, self.height, self.depth, self.num_frames, self.preload_data_size, self.mip_count, self.mip_skip_count, self.bump_scale, self.image_format, self.compressed_size, self.all_mips(), self.no_mips(), self.has_alpha())
     }
 }
 

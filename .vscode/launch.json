@@ -5,11 +5,29 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug (Win)",
+            "name": "scout_head",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/vtfx_reader.exe",
-            "args": ["-i", "${workspaceFolder}/test/scout_head.360.vtf", "-o", "${workspaceFolder}/test", "--open"],
+            "linux": {
+                "program": "${workspaceFolder}/target/debug/vtfx_reader"
+            },
+            "args": ["-i", "${workspaceFolder}/test/scout_head.360.vtf", "-o", "${workspaceFolder}/test", "--open", "--mip0-only"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [{"name": "RUST_BACKTRACE", "value": "1"}],
+            "console": "integratedTerminal",
+            "preLaunchTask": "rust: cargo build"
+        },
+        {
+            "name": "leadpipe",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/vtfx_reader.exe",
+            "linux": {
+                "program": "${workspaceFolder}/target/debug/vtfx_reader"
+            },
+            "args": ["-i", "${workspaceFolder}/test/v_leadpipe.360.vtf", "-o", "${workspaceFolder}/test", "--open"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [{"name": "RUST_BACKTRACE", "value": "1"}],

@@ -5,7 +5,6 @@ use std::io::BufReader;
 use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
 use std::process::exit;
 use args::Args;
 use clap::Parser;
@@ -148,6 +147,7 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                 //is this lzma?
                 if &resource_buffer[0..4] == LZMA_MAGIC
                 {
+                    println!("    Image resource is lzma compressed");
                     //Decompress and replace resource buffer
                     resource_buffer = decompress_lzma(&mut resource_buffer, expected_compressed_size, vtfx)?;
                 }
@@ -160,6 +160,7 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
 
             if !ARGS.no_dxt_fix
             {
+                println!("    Image resource requires endian fix before dxt decode");
                 correct_dxt_endianness(&bc_format, &mut resource_buffer)?;
             }
             else
@@ -167,6 +168,7 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                 println!("! Will skip applying dxt endian fix !")
             }
 
+            println!("    Decoding image from {:?}", format_info_u.bc_format.unwrap());
             //Decompress dxt image, if its still compressed this will fail
             bc_format.decompress(resource_buffer.as_mut_slice(), vtfx.width.into(), vtfx.height.into(), image_vec_slice);
         }
@@ -176,18 +178,15 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
             image_vec = resource_buffer;
         }
 
-        //Keep resouce width
-        let output_width = vtfx.width as u32;
-
         //Take decompressed data and put into image
         let mut width = vtfx.width as u32;
         let mut height = vtfx.height as u32;
         let depth = format_info_u.depth as u32;
         let mut output_offset: usize = 0;
         
-        if ARGS.mip0_only
+        if ARGS.mip0_only && vtfx.mip_count > 1
         {
-            output_offset = 408925 * 4;
+            output_offset = vtfx.get_mip0_start();//408925 * 4;
             if cfg!(debug_assertions) { println!("Offset {},  diff: {}", vtfx.get_mip0_start(), output_offset - vtfx.get_mip0_start()); }
             width = 1024;
             height = 1024;
