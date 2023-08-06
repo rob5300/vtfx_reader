@@ -213,18 +213,16 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
         }
 
         //Take decompressed data and put into image
-        let mut width = vtfx.width as u32;
-        let mut height = vtfx.height as u32;
+        let width = vtfx.width as u32;
+        let height = vtfx.height as u32;
         let depth = format_info_u.depth as u32;
         let mut output_offset: usize = 0;
         
         if ARGS.mip0_only && vtfx.mip_count > 1
         {
             output_offset = vtfx.get_mip0_start();//408925 * 4;
-            if cfg!(debug_assertions) { println!("Offset {},  diff: {}", vtfx.get_mip0_start(), output_offset - vtfx.get_mip0_start()); }
-            width = 1024;
-            height = 1024;
-            println!("    Image resource output will try to just be mip0 at size {} x {} ({}% of total resource)", width, height, 1f32 - (output_offset as f32 / image_vec.len() as f32));
+            //if cfg!(debug_assertions) { println!("Offset {},  diff: {}", vtfx.get_mip0_start(), output_offset - vtfx.get_mip0_start()); }
+            println!("    (EXPERIMENTAL) Image resource output will try to just be mip0");
         }
 
         let mut output_image = DynamicImage::new_rgba8(width, height);
