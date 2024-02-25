@@ -1,4 +1,6 @@
 # VTFX Reader + Image Export
+![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/rob5300/vtfx_reader/latest/total?label=Download%20Latest)
+
 A tool to read the header + output image resources (as png) from a [VTFX file](https://developer.valvesoftware.com/wiki/VTFX_file_format). Written in rust.
 
 - Supports 360 vtf files [\*.360.vtf]. 
