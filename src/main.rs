@@ -30,7 +30,7 @@ const LZMA_MAGIC: &[u8;4] = b"LZMA";
 static ARGS: Lazy<Args> = Lazy::new(|| { Args::parse() });
 
 fn main() {
-    println!("VTFX Reader");
+    println!("VTFX Reader [github.com/rob5300/vtfx_reader]");
 
     if !ARGS.input.exists() {
         println!("Error: No input file given. Run with --help to see arguments.");
@@ -222,7 +222,7 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
         {
             output_offset = vtfx.get_mip0_start();//408925 * 4;
             //if cfg!(debug_assertions) { println!("Offset {},  diff: {}", vtfx.get_mip0_start(), output_offset - vtfx.get_mip0_start()); }
-            println!("    (EXPERIMENTAL) Image resource output will try to just be mip0");
+            println!("    (EXPERIMENTAL) Image resource output will try to just be mip0. Some of the image may be missing!");
         }
 
         let mut output_image = DynamicImage::new_rgba8(width, height);
@@ -270,7 +270,7 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
     }
     else
     {
-        let err = io::Error::new(io::ErrorKind::Other, format!("Unsupported image format: {:?}", image_format));
+        let err = io::Error::new(io::ErrorKind::Other, format!("Unsupported image format: {:?}.\nRequest for other formats to be supported on github.", image_format));
         return Err(Box::new(err));
     }
 }
