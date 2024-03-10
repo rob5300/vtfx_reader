@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 
 use num_enum::TryFromPrimitive;
 
-#[derive(Debug, Default, PartialEq, TryFromPrimitive, Eq, Hash)]
+#[derive(Debug, Default, PartialEq, TryFromPrimitive, Eq, Hash, Copy, Clone)]
 #[repr(i32)]
 #[allow(non_camel_case_types, non_upper_case_globals)] //Keep enums same as source
 //https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/public/bitmap/imageformat.h#L35
@@ -82,8 +82,11 @@ pub enum ImageFormat
 #[derive(Clone)]
 pub struct image_format_info
 {
+    ///Number of colour channels
     pub channels: u16,
+    ///Depth of colours in bytes
     pub depth: u16,
+    ///Order of channels in relation to RGBA (0,1,2,3)
     pub channel_order: Vec<u16>,
     pub bc_format: Option<texpresso::Format>
 }
@@ -277,7 +280,15 @@ static IMAGE_FORMAT_INFO_MAP: Lazy<HashMap<ImageFormat, image_format_info>> = La
     let mut map = HashMap::new();
     map.insert(ImageFormat::IMAGE_FORMAT_DXT1, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc1)));
     map.insert(ImageFormat::IMAGE_FORMAT_DXT5, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc3)));
-    map.insert(ImageFormat::IMAGE_FORMAT_RGBA16161616, image_format_info::new_with_bc(4, 2, vec![0,1,2,3], Option::None));
+    map.insert(ImageFormat::IMAGE_FORMAT_RGBA16161616, image_format_info::new(4, 2, vec![0,1,2,3]));
+    map.insert(ImageFormat::IMAGE_FORMAT_BGRX8888, image_format_info::new(4, 1, vec![2,1,0,3]));
+    map.insert(ImageFormat::IMAGE_FORMAT_LINEAR_BGRX8888, image_format_info::new(4, 1, vec![2,1,0,3]));
+    map.insert(ImageFormat::IMAGE_FORMAT_RGBA8888, image_format_info::new(4, 1, vec![0,1,2,3]));
+    map.insert(ImageFormat::IMAGE_FORMAT_ABGR8888, image_format_info::new(4, 1, vec![3,2,1,0]));
+    map.insert(ImageFormat::IMAGE_FORMAT_RGB888, image_format_info::new(3, 1, vec![0,1,2]));
+    map.insert(ImageFormat::IMAGE_FORMAT_BGR888, image_format_info::new(3, 1, vec![2,1,0]));
+    map.insert(ImageFormat::IMAGE_FORMAT_ARGB8888, image_format_info::new(4, 1, vec![3,2,1,0]));
+    map.insert(ImageFormat::IMAGE_FORMAT_BGRA8888, image_format_info::new(4, 1, vec![2,1,0,3]));
     return map;
 });
 
@@ -285,6 +296,12 @@ impl ImageFormat
 {
     pub fn get_format_info(&self) -> Option<&image_format_info>
     {
-        return IMAGE_FORMAT_INFO_MAP.get(&self);
+        let num = *self as i32;
+        let format_info = IMAGE_FORMAT_INFO_MAP.get(&self);
+        if format_info.is_some() && num >= 30
+        {
+            println!("!!Warning!! The image format '{:?}' is untested. If result is garbage please open an issue on github.", &self);
+        }
+        format_info
     }
 }
