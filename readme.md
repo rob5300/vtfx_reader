@@ -13,7 +13,18 @@ A tool to read the header + output image resources (as png) from a [VTFX file](h
 - DXT1
 - DXT5
 - RGBA16161616
-- 
+- BGRX8888
+- RGBA8888
+- ABGR8888
+- RGB888
+- BGR888
+- ARGB8888
+- BGRA8888
+
+Untested support for:
+
+- LINEAR_BGRX8888.
+
 Compressed (LZMA) and non compressed images are supported. By default alpha is not exported, but can be enabled with the ``--export-alpha`` argument.
 
 ## How to use
@@ -42,6 +53,6 @@ Download the latest release and run, using the arguments listed below to specify
             Auto open exported images
 
 ## Compiling
-To compile from source, install the rust tooling [rustup](https://rustup.rs/), then use ``cargo to run`` and build the project.
+To compile from source, install the rust tooling [rustup](https://rustup.rs/), then use ``cargo run`` and build the project.
 
 [texpresso](https://crates.io/crates/texpresso) is used to decode dxt data, and [lzma-rs](https://crates.io/crates/lzma-rs) for lzma decompression.

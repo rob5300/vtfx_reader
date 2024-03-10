@@ -28,9 +28,10 @@ mod args;
 
 const LZMA_MAGIC: &[u8;4] = b"LZMA";
 static ARGS: Lazy<Args> = Lazy::new(|| { Args::parse() });
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() {
-    println!("VTFX Reader [github.com/rob5300/vtfx_reader]");
+    println!("VTFX Reader {VERSION} [github.com/rob5300/vtfx_reader]");
 
     if !ARGS.input.exists() {
         println!("Error: No input file given. Run with --help to see arguments.");
