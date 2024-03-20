@@ -173,7 +173,7 @@ impl VTFXHEADER
         (self.flags & 0x0020) != 0
     }
 
-    /// Get start of largest mip (width / 2, height / 2)
+    /// Get start of largest mip
     pub fn get_mip0_start(&self) -> usize
     {
         let mut mips = 0;
@@ -193,6 +193,31 @@ impl VTFXHEADER
 
         println!("Mip count: {}. Header count: {}", mips, self.mip_count);
         lower_mip_sizes
+    }
+
+    ///Get start of mip 0 in compressed dxt sizing
+    pub fn get_mip0_dxt_start(&self) -> Result<usize, Box<dyn Error>>
+    {
+        let mip0_start = self.get_mip0_start();
+        let bc_format = self.image_format.try_get_format_info()?.try_get_bc_format()?;
+        let bc_ratio: usize = (4 * 4 * self.get_channels() as usize) / bc_format.block_size();
+
+        let dxt_offset = mip0_start / bc_ratio;
+        Ok(dxt_offset)
+    }
+
+    ///Get the size of dxt data for this vtfx's mip 0
+    pub fn get_dxt_size(&self) -> Result<usize, Box<dyn Error>>
+    {
+        let decoded_size: usize = self.get_total_size();
+        let bc_format = self.image_format.try_get_format_info()?.try_get_bc_format()?;
+        let bc_ratio: usize = (4 * 4 * self.get_channels() as usize) / bc_format.block_size();
+        Ok(decoded_size / bc_ratio)
+    }
+
+    pub fn get_total_size(&self) -> usize
+    {
+        self.width as usize * self.height as usize * self.get_channels() as usize
     }
 }
 

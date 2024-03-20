@@ -8,6 +8,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::process::exit;
 use args::Args;
+use clap::builder::FalseyValueParser;
 use clap::Parser;
 use image::DynamicImage;
 use image::GenericImage;
@@ -102,6 +103,11 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
         println!("[Debug] Has dxt5 hint flag");
     }
 
+    if cfg!(debug_assertions) && vtfx.has_onebit_alpha()
+    {
+        println!("[Debug] Has onebit alpha flag");
+    }
+
     println!("{}", vtfx);
 
     let mut res_num = 0;
@@ -117,7 +123,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
 
             if !ARGS.no_resource_export
             {
-                match resource_to_image(&buffer, &resource, &vtfx) {
+                match resource_to_image(&buffer, &resource, &vtfx, &res_num) {
                     Ok(image) => {
                         let filename = path.file_stem().unwrap().to_str().unwrap();
                         let new_image_name = format!("{filename}_resource_{res_num}.png");
@@ -127,7 +133,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
                             false => PathBuf::from(&new_image_name)
                         };
                         image.save_with_format(save_path, image::ImageFormat::Png)?;
-                        println!("    Saved resource image data to '{}'", save_path.as_path().to_string_lossy());
+                        println!("    ✅ Saved resource image data to '{}'", save_path.as_path().to_string_lossy());
 
                         if ARGS.open
                         {
@@ -135,7 +141,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
                             opener::open(save_path.as_path())?;
                         }
                     },
-                    Err(error) => {println!("    Resource to image error: {}", error)},
+                    Err(error) => {println!("    ❌ Error converting resource {} to image: {}", res_num, error)},
                 }
             }
             
@@ -151,7 +157,7 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
 }
 
 ///Extract image resource and return it as DynamicImage
-fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtfx: &VTFXHEADER) -> Result<DynamicImage, Box<dyn Error>>
+fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtfx: &VTFXHEADER, res_num: &i32) -> Result<DynamicImage, Box<dyn Error>>
 {
     let res_start: usize = resource_entry_info.resData.try_into()?;
     //Copy input buffer
@@ -161,28 +167,31 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
     if format_info.is_some()
     {
         let format_info_u = format_info.unwrap();
-        let channels = format_info_u.channels as u32;
-        let size: u32 = channels * vtfx.width as u32 * vtfx.height as u32;
         let mut image_vec: Vec<u8>;
+
+        let width = vtfx.width as usize;
+        let height = vtfx.height as usize;
+
+        let mut bc_read_offset = 0;
+
+        println!("Resource #{res_num}: w: {width}, h: {height}");
 
         //If this format is BC encoded
         if format_info_u.bc_format.is_some()
         {
             let bc_format = format_info_u.bc_format.unwrap();
-            image_vec = vec![0; size.try_into()?];
+            //Allocate space for 4 channels
+            image_vec = vec![0; width * height * 4];
             let image_vec_slice = image_vec.as_mut_slice();
-            //let mut decompress_buffer: Rc<Vec<u8>>;
-
-            if cfg!(debug_assertions){ println!("[Debug] In slice size: {}. Allocated {} bytes for decompression. Channels: {}", resource_buffer.len(), size, channels); }
 
             //What the dxt data size should be
-            let expected_compressed_size = bc_format.compressed_size(vtfx.width.into(), vtfx.height.into());
+            let expected_compressed_size = bc_format.compressed_size(width, height);
             if expected_compressed_size != resource_buffer.len()
             {
                 //is this lzma?
                 if &resource_buffer[0..4] == LZMA_MAGIC
                 {
-                    println!("    Image resource is lzma compressed");
+                    println!("    Image resource is LZMA compressed, decompressing...");
                     //Decompress and replace resource buffer
                     resource_buffer = decompress_lzma(&mut resource_buffer, expected_compressed_size, vtfx)?;
                 }
@@ -195,17 +204,24 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
 
             if !ARGS.no_dxt_fix
             {
-                println!("    Image resource requires endian fix before dxt decode");
+                println!("    Applying endianness fix to resource '{res_num}' before dxt decode...");
                 correct_dxt_endianness(&bc_format, &mut resource_buffer)?;
             }
             else
             {
-                println!("! Will skip applying dxt endian fix !")
+                println!("! Will skip applying dxt endian fix for image resource '{res_num}' !")
             }
 
-            println!("    Decoding image from {:?}", format_info_u.bc_format.unwrap());
+            if vtfx.mip_count > 1
+            {
+                println!("    Resource {res_num} contains {} mip levels, only mip 0 will be exported", vtfx.mip_count);
+                bc_read_offset = resource_buffer.len() - vtfx.get_dxt_size()?;
+            }
+
+            println!("    Decoding image from {:?}, DTX buffer offset: {}", format_info_u.bc_format.unwrap(), bc_read_offset);
             //Decompress dxt image, if its still compressed this will fail
-            bc_format.decompress(resource_buffer.as_mut_slice(), vtfx.width.into(), vtfx.height.into(), image_vec_slice);
+            //Use read offset when getting dtx buffer slice
+            bc_format.decompress(&mut resource_buffer[bc_read_offset..], width, height, image_vec_slice);
         }
         else
         {
@@ -214,39 +230,29 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
         }
 
         //Take decompressed data and put into image
-        let width = vtfx.width as u32;
-        let height = vtfx.height as u32;
-        let depth = format_info_u.depth as u32;
-        let mut output_offset: usize = 0;
-        
-        if ARGS.mip0_only && vtfx.mip_count > 1
+        let mut output_image = DynamicImage::new_rgba8(vtfx.width.into(), vtfx.height.into());
+
+        if ARGS.export_alpha
         {
-            output_offset = vtfx.get_mip0_start();//408925 * 4;
-            //if cfg!(debug_assertions) { println!("Offset {},  diff: {}", vtfx.get_mip0_start(), output_offset - vtfx.get_mip0_start()); }
-            println!("    (EXPERIMENTAL) Image resource output will try to just be mip0. Some of the image may be missing!");
+            println!("    Alpha will be included in the export for image resource '{res_num}'");
         }
 
-        let mut output_image = DynamicImage::new_rgba8(width, height);
-
-        if image_vec.len() != size as usize
+        let width_u32 = width as u32;
+        let depth_u32 = format_info_u.depth as u32;
+        let channels = format_info_u.channels as usize;
+        for y in 0..output_image.height()
         {
-            let err = io::Error::new(io::ErrorKind::Other, format!("decoded image data is wrong size. Expected: {}, Got: {}", size, image_vec.len()));
-            return Err(Box::new(err));
-        }
-
-        for y in 0..height
-        {
-            for x in 0..width
+            for x in 0..output_image.width()
             {
                 let mut pixel: Rgba<u8> = Rgba([255;4]);
                 //Index of pixel data to read from decoded output
-                let pixel_index: u32 = output_offset as u32 + ((x + y * width) * depth * channels);
-                for channel in 0..channels as usize
+                let pixel_index = (x + y * width_u32) * depth_u32 * 4;
+                for channel in 0..channels
                 {
                     //Using format data, construct index and copy source image pixel colour data
                     let channel_offset = format_info_u.channel_order[channel] as u32;
                     //Add channel offset to pixel index.
-                    let from_index: usize = (pixel_index + (channel_offset * depth)) as usize;
+                    let from_index: usize = (pixel_index + (channel_offset * depth_u32)) as usize;
 
                     if from_index < image_vec.len()
                     {
@@ -260,10 +266,7 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                     pixel[3] = 255;
                 }
                 
-                if x < width && y < height
-                {
-                    output_image.put_pixel(x, y, pixel);
-                }
+                output_image.put_pixel(x, y, pixel);
             }
         }
 
@@ -299,7 +302,8 @@ fn decompress_lzma(resource_buffer: &mut Vec<u8>, expected_compressed_size: usiz
     new_header_resource_buffer.push(resource_buffer[12]);
 
     //Print valves properties if debug build
-    if cfg!(debug_assertions) {
+    #[cfg(debug_assertions)]
+    {
         println!("[Debug LZMA] Dictionary size: {}", dictionary_size);
         let mut prop0: u8 = u8::from(resource_buffer[12]);
         let original_prop0 = prop0.clone();
@@ -320,7 +324,7 @@ fn decompress_lzma(resource_buffer: &mut Vec<u8>, expected_compressed_size: usiz
     }
 
     lzma_rs::lzma_decompress(&mut &resource_buffer[..], &mut decomp)?;
-    println!("Decompressed to: {}, Expected: {}", decomp.len(), expected_compressed_size);
+    println!("    Decompressed to: {}, Expected: {}", decomp.len(), expected_compressed_size);
     Ok(decomp)
 }
 

@@ -17,10 +17,6 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub export_alpha: bool,
 
-    /// Try to output only mip 0 (EXPERIMENTAL)
-    #[arg(long, default_value_t = false)]
-    pub mip0_only: bool,
-
     /// Do not use big to little endian fix on DXT images
     #[arg(long, default_value_t = false)]
     pub no_dxt_fix: bool,

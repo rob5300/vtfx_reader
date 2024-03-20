@@ -12,7 +12,7 @@
             "linux": {
                 "program": "${workspaceFolder}/target/debug/vtfx_reader"
             },
-            "args": ["-i", "${workspaceFolder}/test/scout_head.360.vtf", "-o", "${workspaceFolder}/test", "--open", "--mip0-only"],
+            "args": ["-i", "${workspaceFolder}/test/scout_head.360.vtf", "-o", "${workspaceFolder}/test", "--open"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [{"name": "RUST_BACKTRACE", "value": "1"}],
@@ -20,14 +20,29 @@
             "preLaunchTask": "rust: cargo build"
         },
         {
-            "name": "leadpipe",
+            "name": "scout_blue",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/vtfx_reader.exe",
             "linux": {
                 "program": "${workspaceFolder}/target/debug/vtfx_reader"
             },
-            "args": ["-i", "${workspaceFolder}/test/v_leadpipe.360.vtf", "-o", "${workspaceFolder}/test", "--open"],
+            "args": ["-i", "${workspaceFolder}/test/scout_blue.360.vtf", "-o", "${workspaceFolder}/test", "--open"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [{"name": "RUST_BACKTRACE", "value": "1"}],
+            "console": "integratedTerminal",
+            "preLaunchTask": "rust: cargo build"
+        },
+        {
+            "name": "brickwall001_normal",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/vtfx_reader.exe",
+            "linux": {
+                "program": "${workspaceFolder}/target/debug/vtfx_reader"
+            },
+            "args": ["-i", "${workspaceFolder}/test/brickwall001_normal.360.vtf", "-o", "${workspaceFolder}/test", "--open"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [{"name": "RUST_BACKTRACE", "value": "1"}],

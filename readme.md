@@ -4,10 +4,10 @@
 
 A tool to read the header + output image resources (as png) from a [VTFX file](https://developer.valvesoftware.com/wiki/VTFX_file_format). Written in rust.
 
-- Supports 360 vtf files [\*.360.vtf]. 
-- PS3 files are also supported [\*.vtf] but use the ``--no-dxt-fix`` argument to get a desired output.
+- Supports 360 vtf files [\*.360.vtf].
+- PS3 files are also supported [\*.vtf], use the ``--no-dxt-fix`` argument to get a desired output.
 
-*Note: X360 images usually have multiple mip levels packed into the texture, functionality to export only the max mip level is in progress and experimental.*
+*Note: Xbox 360 vtfx's usually have multiple mip levels packed into the main resource, the largest mip level will be exported.*
 
 ## Working texture export formats (Open issue to request):
 - DXT1
@@ -39,9 +39,6 @@ Download the latest release and run, using the arguments listed below to specify
 
         --export-alpha
             Export alpha channel
-
-        --mip0-only
-            Try to output only mip 0 (EXPERIMENTAL)
 
         --no-dxt-fix
             Do not use big to little endian fix on DXT images

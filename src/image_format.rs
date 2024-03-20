@@ -112,6 +112,12 @@ impl image_format_info
             bc_format: bc_format
         }
     }
+
+    pub fn try_get_bc_format(&self) -> Result<texpresso::Format, Box<dyn Error>>
+    {
+        let bc_format = self.bc_format.ok_or("Image format is not DXT")?;
+        Ok(bc_format)
+    }
 }
 
 ///Correct endianness of dxt bc data
@@ -278,7 +284,7 @@ pub fn GetMipMapLevelByteOffset(mut width: i32, mut height: i32, image_format: &
 
 static IMAGE_FORMAT_INFO_MAP: Lazy<HashMap<ImageFormat, image_format_info>> = Lazy::new(|| {
     let mut map = HashMap::new();
-    map.insert(ImageFormat::IMAGE_FORMAT_DXT1, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc1)));
+    map.insert(ImageFormat::IMAGE_FORMAT_DXT1, image_format_info::new_with_bc(3, 1, vec![0,1,2], Option::from(texpresso::Format::Bc1)));
     map.insert(ImageFormat::IMAGE_FORMAT_DXT5, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc3)));
     map.insert(ImageFormat::IMAGE_FORMAT_RGBA16161616, image_format_info::new(4, 2, vec![0,1,2,3]));
     map.insert(ImageFormat::IMAGE_FORMAT_BGRX8888, image_format_info::new(4, 1, vec![2,1,0,3]));
@@ -303,5 +309,11 @@ impl ImageFormat
             println!("!!Warning!! The image format '{:?}' is untested. If result is garbage please open an issue on github.", &self);
         }
         format_info
+    }
+
+    pub fn try_get_format_info(&self) -> Result<&image_format_info, Box<dyn Error>>
+    {
+        let image_format = self.get_format_info().ok_or("vtfx is an unsupported/unknown format")?;
+        Ok(image_format)
     }
 }
