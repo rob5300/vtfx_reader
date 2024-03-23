@@ -108,7 +108,7 @@ impl VTFXHEADER
         vtfx.compressed_size = u32::from_be_bytes(buffer[i..i+4].try_into().unwrap());
         i += 4;
 
-        if cfg!(debug_assertions){ println!("[Debug] VTFX READ END: Current read position: {}, Data left: {} bytes.\n", i, buffer.len() - i); }
+        if cfg!(debug_assertions){ println!("[Debug] VTFX READ END: Current read position: {}, Data left: {} bytes", i, buffer.len() - i); }
 
         vtfx.mip_count = match vtfx.no_mips() {
             true => 1,
@@ -218,6 +218,11 @@ impl VTFXHEADER
     pub fn get_total_size(&self) -> usize
     {
         self.width as usize * self.height as usize * self.get_channels() as usize
+    }
+
+    pub fn is_xbox(&self) -> bool
+    {
+        self.version[0] == VTF_X360_MAJOR_VERSION && self.version[1] == VTF_X360_MINOR_VERSION
     }
 }
 

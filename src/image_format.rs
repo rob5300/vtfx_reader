@@ -120,7 +120,7 @@ impl image_format_info
     }
 }
 
-///Correct endianness of dxt bc data
+///Convert endianness of dxt bc data (big to little)
 pub fn correct_dxt_endianness(format: &texpresso::Format, data: &mut [u8]) -> Result<(), Box<dyn Error>>
 {
     //https://learn.microsoft.com/en-us/windows/win32/direct3d10/d3d10-graphics-programming-guide-resources-block-compression#bc1
@@ -286,6 +286,7 @@ static IMAGE_FORMAT_INFO_MAP: Lazy<HashMap<ImageFormat, image_format_info>> = La
     let mut map = HashMap::new();
     map.insert(ImageFormat::IMAGE_FORMAT_DXT1, image_format_info::new_with_bc(3, 1, vec![0,1,2], Option::from(texpresso::Format::Bc1)));
     map.insert(ImageFormat::IMAGE_FORMAT_DXT5, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc3)));
+    map.insert(ImageFormat::IMAGE_FORMAT_DXT1_ONEBITALPHA, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc1)));
     map.insert(ImageFormat::IMAGE_FORMAT_RGBA16161616, image_format_info::new(4, 2, vec![0,1,2,3]));
     map.insert(ImageFormat::IMAGE_FORMAT_BGRX8888, image_format_info::new(4, 1, vec![2,1,0,3]));
     map.insert(ImageFormat::IMAGE_FORMAT_LINEAR_BGRX8888, image_format_info::new(4, 1, vec![2,1,0,3]));

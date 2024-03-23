@@ -8,7 +8,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::process::exit;
 use args::Args;
-use clap::builder::FalseyValueParser;
 use clap::Parser;
 use image::DynamicImage;
 use image::GenericImage;
@@ -96,6 +95,11 @@ fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
     reader.read_to_end(&mut buffer)?;
 
     let vtfx = VTFXHEADER::from(&buffer)?;
+
+    println!("    Vtfx is for {}", match vtfx.is_xbox() {
+        true => "Xbox 360",
+        false => "PS3/Other"
+    });
 
     let dxt_hint = vtfx.hint_dx5();
     if cfg!(debug_assertions) && dxt_hint
@@ -202,7 +206,7 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                 }
             }
 
-            if !ARGS.no_dxt_fix
+            if vtfx.is_xbox() || ARGS.force_dxt_endian_fix
             {
                 println!("    Applying endianness fix to resource '{res_num}' before dxt decode...");
                 correct_dxt_endianness(&bc_format, &mut resource_buffer)?;
