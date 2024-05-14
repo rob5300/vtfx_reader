@@ -1,4 +1,6 @@
 # VTFX Reader + Image Export
+[![Download Latest Windows EXE](https://img.shields.io/badge/Download_Latest-Window_EXE-orange?style=flat)](https://github.com/rob5300/vtfx_reader/releases/latest/download/vtfx_reader.exe)
+
 [![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/rob5300/vtfx_reader/latest/total?sort=date)
 ](https://github.com/rob5300/vtfx_reader/releases/latest)
 
@@ -60,7 +62,12 @@ Download the latest release and run, using the arguments listed below to specify
     -V, --version
             Print version
 
+## Download
+Download a windows build from the [latest release](https://github.com/rob5300/vtfx_reader/releases/latest).
+
+Other platforms should compile with the instructions below (linux builds may be added in future)
+
 ## Compiling
-To compile from source, install the rust tooling [rustup](https://rustup.rs/), then use ``cargo run`` to build and run the project.
+To compile from source, install the rust tooling [rustup](https://rustup.rs/), clone this project repo then use ``cargo run`` to build and run the project.
 
 [texpresso](https://crates.io/crates/texpresso) is used to decode dxt data, and [lzma-rs](https://crates.io/crates/lzma-rs) for lzma decompression.
