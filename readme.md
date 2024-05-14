@@ -1,5 +1,5 @@
 # VTFX Reader + Image Export
-[![Download Latest Windows EXE](https://img.shields.io/badge/Download_Latest-Window_EXE-orange?style=flat)](https://github.com/rob5300/vtfx_reader/releases/latest/download/vtfx_reader.exe)
+[![Download Latest Windows EXE](https://img.shields.io/badge/Download_Latest-Windows_EXE-orange?style=flat)](https://github.com/rob5300/vtfx_reader/releases/latest/download/vtfx_reader.exe)
 
 [![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/rob5300/vtfx_reader/latest/total?sort=date)
 ](https://github.com/rob5300/vtfx_reader/releases/latest)
