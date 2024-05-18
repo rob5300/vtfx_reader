@@ -33,7 +33,9 @@ Compressed (LZMA) and non compressed images are supported. By default alpha is n
 Files detected to be for the xbox 360 (v 864.8) that are in the image formats IMAGE_FORMAT_DXT1, IMAGE_FORMAT_DXT3 or IMAGE_FORMAT_DXT5 will have their endianness converted before decoding (otherwise the output will have corrupted color). PS3 files (usually v 819.8) do not need this.
 
 ## How to use
-Download the latest release and run, using the arguments listed below to specify the input files and options.
+Download the latest release and run via cmd/powershell/terminal using the command line arguments listed below to specify the input files and options.
+
+e.g. ``./vtfx_reader -i foo.vtf`` to process the file "foo.vtf" in the same folder
 
     Usage: vtfx_reader.exe [OPTIONS] --input <INPUT>
 
