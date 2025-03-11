@@ -180,6 +180,22 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
 
         println!("Resource #{res_num}: w: {width}, h: {height}");
 
+        let is_lzma_compressed = &resource_buffer[0..4] == LZMA_MAGIC;
+
+        //Is this resource lzma compressed?
+        let expected_size = format_info_u.get_expected_size(&width, &height);
+        if is_lzma_compressed
+        {
+            println!("    Image resource is LZMA compressed, decompressing...");
+            //Decompress and replace resource buffer
+            resource_buffer = decompress_lzma(&mut resource_buffer, expected_size, vtfx)?;
+        }
+        else if resource_buffer.len() < expected_size
+        {
+            let size_error = io::Error::new(io::ErrorKind::InvalidInput, format!("resource size is {} but expected length is {}, resource cannot decoded", resource_buffer.len(), expected_size));
+            return Err(Box::new(size_error));
+        }
+
         //If this format is BC encoded
         if format_info_u.bc_format.is_some()
         {
@@ -187,24 +203,6 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
             //Allocate space for 4 channels
             image_vec = vec![0; width * height * 4];
             let image_vec_slice = image_vec.as_mut_slice();
-
-            //What the dxt data size should be
-            let expected_compressed_size = bc_format.compressed_size(width, height);
-            if expected_compressed_size != resource_buffer.len()
-            {
-                //is this lzma?
-                if &resource_buffer[0..4] == LZMA_MAGIC
-                {
-                    println!("    Image resource is LZMA compressed, decompressing...");
-                    //Decompress and replace resource buffer
-                    resource_buffer = decompress_lzma(&mut resource_buffer, expected_compressed_size, vtfx)?;
-                }
-                else if resource_buffer.len() < expected_compressed_size
-                {
-                    let size_error = io::Error::new(io::ErrorKind::InvalidInput, format!("resource size is {} but expected length is {}, resource cannot decoded", resource_buffer.len(), expected_compressed_size));
-                    return Err(Box::new(size_error));
-                }
-            }
 
             if vtfx.is_xbox() || ARGS.force_dxt_endian_fix
             {
@@ -229,8 +227,22 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
         }
         else
         {
-            //Resource buffer is already usable
-            image_vec = resource_buffer;
+            if vtfx.is_xbox() && vtfx.mip_count > 1
+            {
+                #[cfg(debug_assertions)]
+                {
+                    println!("    [DEBUG] Will adjust image vector to start at largest mip map");
+                }
+
+                //Make new vector but skip to start of largest mip map (as img resources are packed smallest to largest dimension wise)
+                let large_mip_start = resource_buffer.len() - expected_size;
+                image_vec = resource_buffer[large_mip_start..].to_vec();
+            }
+            else
+            {
+                //Resource buffer is already usable
+                image_vec = resource_buffer;
+            }
         }
 
         //Take decompressed data and put into image

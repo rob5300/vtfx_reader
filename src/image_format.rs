@@ -118,6 +118,20 @@ impl image_format_info
         let bc_format = self.bc_format.ok_or("Image format is not DXT")?;
         Ok(bc_format)
     }
+
+    ///Get expected size for a resource in this format
+    pub fn get_expected_size(&self, width: &usize, height: &usize) -> usize
+    {
+        if self.bc_format.is_some()
+        {
+            self.bc_format.unwrap().compressed_size(*width, *height)
+        }
+        else
+        {
+            let single_pixel_size = self.depth * self.channels;
+            width * height * single_pixel_size as usize
+        }
+    }
 }
 
 ///Convert endianness of dxt bc data (big to little)
@@ -284,6 +298,7 @@ pub fn GetMipMapLevelByteOffset(mut width: i32, mut height: i32, image_format: &
 
 static IMAGE_FORMAT_INFO_MAP: Lazy<HashMap<ImageFormat, image_format_info>> = Lazy::new(|| {
     let mut map = HashMap::new();
+    map.reserve(12);
     map.insert(ImageFormat::IMAGE_FORMAT_DXT1, image_format_info::new_with_bc(3, 1, vec![0,1,2], Option::from(texpresso::Format::Bc1)));
     map.insert(ImageFormat::IMAGE_FORMAT_DXT5, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc3)));
     map.insert(ImageFormat::IMAGE_FORMAT_DXT1_ONEBITALPHA, image_format_info::new_with_bc(4, 1, vec![0,1,2,3], Option::from(texpresso::Format::Bc1)));
