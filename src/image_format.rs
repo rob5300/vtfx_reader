@@ -310,7 +310,7 @@ static IMAGE_FORMAT_INFO_MAP: Lazy<HashMap<ImageFormat, image_format_info>> = La
     map.insert(ImageFormat::IMAGE_FORMAT_RGB888, image_format_info::new(3, 1, vec![0,1,2]));
     map.insert(ImageFormat::IMAGE_FORMAT_BGR888, image_format_info::new(3, 1, vec![2,1,0]));
     map.insert(ImageFormat::IMAGE_FORMAT_ARGB8888, image_format_info::new(4, 1, vec![3,2,1,0]));
-    map.insert(ImageFormat::IMAGE_FORMAT_BGRA8888, image_format_info::new(4, 1, vec![2,1,0,3]));
+    map.insert(ImageFormat::IMAGE_FORMAT_BGRA8888, image_format_info::new(4, 1, vec![1,2,3,0])); //Sometimes is G,B,A,R?
     return map;
 });
 

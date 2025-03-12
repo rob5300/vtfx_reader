@@ -171,6 +171,12 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
     if format_info.is_some()
     {
         let format_info_u = format_info.unwrap();
+
+        if *image_format == ImageFormat::IMAGE_FORMAT_BGRA8888
+        {
+            println!("❕ NOTE: In this version ({}), BGRA8888 has its channel order changed to G,B,A,R. If this causes invalid results then please open a github issue.", VERSION)
+        }
+
         let mut image_vec: Vec<u8>;
 
         let width = vtfx.width as usize;
@@ -281,6 +287,13 @@ fn resource_to_image(buffer: &[u8], resource_entry_info: &ResourceEntryInfo, vtf
                 {
                     pixel[3] = 255;
                 }
+                else if ARGS.experimental_onebitalpha
+                {
+                    pixel[3] = match pixel[3] > 1{
+                        true => 0,
+                        false => 255
+                    };
+                }
                 
                 output_image.put_pixel(x, y, pixel);
             }
@@ -377,18 +390,4 @@ fn get_valve_lzma_properties(prop0: &mut u8, pb: &mut i32, lp: &mut i32, lc: &mu
     }
 
     *lc = *prop0 as i32;
-}
-
-fn get_y_offset(y: u32) -> i32
-{
-    if y == 0
-    {
-        return 0;
-    }
-
-    let seg = y % 4;
-    return match seg < 2 {
-        true => 2,
-        false => -2
-    };
 }

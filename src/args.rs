@@ -27,5 +27,9 @@ pub struct Args {
 
     /// Auto open exported images
     #[arg(long, default_value_t = false)]
-    pub open: bool
+    pub open: bool,
+
+    /// EXPERIMENTAL: If alpha export is enabled, force 0 or 255 (inverted).
+    #[arg(long, default_value_t = false)]
+    pub experimental_onebitalpha: bool
 }
