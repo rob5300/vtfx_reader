@@ -87,7 +87,15 @@ fn read_all_vtfx_in_folder(path: &Path) -> Result<(), Box<dyn Error>>
 }
 
 ///Open a vtfx file at path and read its data
-fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>> {
+fn read_vtfx(path: &Path) -> Result<VTFXHEADER, Box<dyn Error>>
+{
+    //Validate file extension
+    let extension = path.extension().unwrap_or_default().to_str().unwrap_or_default().to_lowercase();
+    if extension != "vtf" && extension != "vtfx"
+    {
+        return Err(Box::new(io::Error::new(io::ErrorKind::InvalidInput, "File extension is not 'vtf' or 'vtfx")));
+    }
+
     let f = File::open(path)?;
     let mut reader = BufReader::new(f);
     let mut buffer: Vec<u8> = Vec::new();
