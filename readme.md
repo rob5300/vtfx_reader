@@ -1,16 +1,19 @@
-# VTFX Reader + Image Export
+# VTFX Image Converter (Source engine PS3/Xbox 360 VTF)
 [![Download Latest Windows EXE](https://img.shields.io/badge/Download_Latest-Windows_EXE-orange?style=flat)](https://github.com/rob5300/vtfx_reader/releases/latest/download/vtfx_reader.exe)
 
 [![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/rob5300/vtfx_reader/latest/total?sort=date)
 ](https://github.com/rob5300/vtfx_reader/releases/latest)
 
-A tool to read the header + output image resources (as png) from a [VTFX file](https://developer.valvesoftware.com/wiki/VTFX_file_format). Supports LZMA compressed resources as well as big endian formatted resources. Written in rust.
+VTFX Reader converts [VTFX files](https://developer.valvesoftware.com/wiki/VTFX_file_format) to PNG's. Supports LZMA compressed resources as well as big endian formatted resources. Written in rust.
 
 - Supports 360 vtf files [\*.360.vtf]. DXT endianness is automatically fixed.
 - PS3 files  [\*.vtf].
 
 > [!NOTE]
-> Xbox 360 vtfx's usually have multiple mip levels packed into the main resource, the largest mip level will be exported.
+> Xbox 360 vtfx's usually have multiple mip levels packed into the main resource, the largest(best) mip level will be exported.
+
+## Why does this exist?
+Common tools such as VTFEdit only support vtf files made for PC versions of source engine. PS3 and X360 versions of source use [VTFX](https://developer.valvesoftware.com/wiki/VTFX_file_format) which are specially formatted for these platforms. This means they cannot be read by existing tools without special logic.
 
 ## Working texture export formats (Open issue to request):
 - DXT1
@@ -73,3 +76,8 @@ Other platforms should compile with the instructions below (linux builds may be 
 To compile from source, install the rust tooling [rustup](https://rustup.rs/), clone this project repo then use ``cargo run`` to build and run the project.
 
 [texpresso](https://crates.io/crates/texpresso) is used to decode dxt data, and [lzma-rs](https://crates.io/crates/lzma-rs) for lzma decompression.
+
+## Technical Info
+To parse [VTFX](https://developer.valvesoftware.com/wiki/VTFX_file_format) files correctly, we parse the header contents manually while performing big to little endian conversion (rust thankfully provides this for most major data types). Additionally, images using DXT compression also require data to be converted from big to little endian before being uncompressed. This is custom written for BC1 and BC3 data blocks.
+
+Thankfully no endian conversion is required for LZMA compressed data but some data does need to be adjusted for decompression to work correctly with [lzma-rs](https://crates.io/crates/lzma-rs).
